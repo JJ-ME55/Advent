@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { connections, withRpc, loadKeypair, balanceOf } from "../src/solana.mjs";
 
+process.on("unhandledRejection", (e) => console.log("unhandled (ignored):", String(e?.message ?? e).slice(0, 120)));
 const here = dirname(fileURLToPath(import.meta.url));
 const root = join(here, "..", "..");
 const RPC = process.env.RPC_URL ?? "https://api.devnet.solana.com";
@@ -35,23 +36,23 @@ async function fund(to, sol) {
     const { blockhash, lastValidBlockHeight } = await c.getLatestBlockhash("confirmed");
     tx.recentBlockhash = blockhash; tx.feePayer = treasury.publicKey; tx.sign(treasury);
     const s = await c.sendRawTransaction(tx.serialize()); await c.confirmTransaction({ signature: s, blockhash, lastValidBlockHeight }, "confirmed");
-  }), "fund"); await sleep(600);
+  }), "fund"); await sleep(1500);
 }
 const conn = conns[0];
 // public devnet rate-limits: retry everything in the setup with backoff
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function retry(fn, what) { for (let i = 0; ; i++) { try { return await fn(); } catch (e) { if (i >= 6) throw e; log(`${what}: ${e.message.slice(0, 80)} (retry ${i + 1})`); await sleep(1500 * 2 ** i); } } }
+async function retry(fn, what) { for (let i = 0; ; i++) { try { return await fn(); } catch (e) { if (i >= 6) throw e; log(`${what}: ${e.message.slice(0, 80)} (retry ${i + 1})`); await sleep(2500 * 2 ** i); } } }
 
 // 1. the coin and its "buyers"
 await fund(curve.publicKey, 0.05);
 for (const b of buyers) await fund(b.publicKey, 0.02);
 await fund(door.publicKey, 0.5); // the pot (+ gas)
 await fund(bonus.publicKey, 0.05);
-const mint = await retry(() => createMint(conn, treasury, treasury.publicKey, null, 6), "createMint");
+const mint = await retry(() => createMint(conn, treasury, treasury.publicKey, null, 6), "createMint"); await sleep(2000);
 log("mint", mint.toBase58());
 const curveAta = await retry(() => getOrCreateAssociatedTokenAccount(conn, curve, mint, curve.publicKey), "curve ata");
 await retry(() => mintTo(conn, treasury, mint, curveAta.address, treasury, 1_000_000_000n * 1_000_000n), "mintTo");
-const buy = async (b, tokens) => { const ata = await retry(() => getOrCreateAssociatedTokenAccount(conn, b, mint, b.publicKey), "buyer ata"); await retry(() => transfer(conn, curve, curveAta.address, ata.address, curve, tokens * 1_000_000n), "buy"); await sleep(800); };
+const buy = async (b, tokens) => { const ata = await retry(() => getOrCreateAssociatedTokenAccount(conn, b, mint, b.publicKey), "buyer ata"); await retry(() => transfer(conn, curve, curveAta.address, ata.address, curve, tokens * 1_000_000n), "buy"); await sleep(2000); };
 await buy(buyers[0], 300_000n); await buy(buyers[1], 150_000n); await buy(buyers[2], 50_000n); // 50k is under the 100k minimum
 log("buyers", buyers.map((b) => b.publicKey.toBase58()).join(" "));
 

@@ -1,0 +1,25 @@
+[Unit]
+Description=ADVENT keeper
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=advent
+Group=advent
+WorkingDirectory=/opt/advent
+EnvironmentFile=/opt/advent/.env
+ExecStart=/usr/bin/node keeper/src/keeper.mjs
+Restart=always
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadWritePaths=/opt/advent/draws /opt/advent/state /opt/advent/posts
+ProtectHome=true
+PrivateTmp=true
+MemoryMax=400M
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
