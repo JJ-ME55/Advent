@@ -3,12 +3,14 @@ import { roundAt, roundTime } from "./drand.mjs";
 
 export const DOOR_HOUR_UTC = Number(process.env.DOOR_HOUR_UTC ?? 18);
 export const YEAR = Number(process.env.ADVENT_YEAR ?? 2026);
-export const SNAPSHOT_LEAD = 10 * 60; // the list is pinned this long before the door
+export const SNAPSHOT_LEAD = Number(process.env.SNAPSHOT_LEAD_SECONDS ?? 10 * 60); // the list is pinned this long before the door
 export const COMMIT_MARGIN = 60; // and the memo must land this long before the round
 export const LAST_DOOR = Number(process.env.LAST_DOOR ?? 25);
 
 /** Unix seconds at which door d opens. Doors run 1..LAST_DOOR in December; 0 and negatives are warm-up doors before it. */
+const OVERRIDES = process.env.DOOR_TIMES ? JSON.parse(process.env.DOOR_TIMES) : {}; // {"-1": unixSeconds} for rehearsals
 export function doorTime(d) {
+  if (OVERRIDES[d] !== undefined) return Number(OVERRIDES[d]);
   return Math.floor(Date.UTC(YEAR, 11, d, DOOR_HOUR_UTC) / 1000);
 }
 export const snapshotTime = (d) => doorTime(d) - SNAPSHOT_LEAD;

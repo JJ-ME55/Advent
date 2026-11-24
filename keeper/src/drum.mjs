@@ -11,9 +11,9 @@ import { createHash } from "node:crypto";
 
 export const DECIMALS = 6n; // pump.fun mints
 export const UNIT = 10n ** DECIMALS;
-export const MIN_BALANCE = 100_000n * UNIT; // 0.01% of a 1B supply
-export const ELIGIBLE_AFTER = 30n * 60n;
-export const FULL_MULTIPLIER_AFTER = 72n * 3600n;
+export const MIN_BALANCE = BigInt(process.env.MIN_BALANCE_TOKENS ?? 100_000) * UNIT; // 0.01% of a 1B supply
+export const ELIGIBLE_AFTER = BigInt(process.env.ELIGIBLE_AFTER_SECONDS ?? 30 * 60);
+export const FULL_MULTIPLIER_AFTER = BigInt(process.env.FULL_MULTIPLIER_AFTER_SECONDS ?? 72 * 3600);
 export const WAD = 10n ** 18n;
 
 export function weightFor(bal, holdStart, t) {

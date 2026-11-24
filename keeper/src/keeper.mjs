@@ -10,7 +10,7 @@
 // DRAWS_DIR, STATE_FILE, BONUS_ENTRANTS_FILE (json array per door, written by the API), ALERT_WEBHOOK, ONCE=1.
 import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { connections, loadKeypair, balanceOf, sendSol, sendMemo, heliusDeltas, memosOf, parseCommit, PublicKey, LAMPORTS_PER_SOL } from "./solana.mjs";
+import { connections, loadKeypair, balanceOf, sendSol, sendMemo, heliusDeltas, rpcDeltas, PublicKey, LAMPORTS_PER_SOL } from "./solana.mjs";
 import { snapshot, commit, settle } from "./draw.mjs";
 import { nextDoor, isSnapshotDue, isSettleDue, doorTime, doorRoundTime, LAST_DOOR } from "./doors.mjs";
 import { claimCreatorFees } from "./claim.mjs";
@@ -56,9 +56,9 @@ async function alert(key, text, every = 3600) {
 const chain = {
   now: () => Math.floor(Date.now() / 1000),
   deltas: async (mint, untilSig) => {
-    const fresh = await heliusDeltas(mint, { untilSignature: untilSig });
+    const fresh = process.env.HELIUS_API_KEY ? await heliusDeltas(mint, { untilSignature: untilSig }) : await rpcDeltas(conns, mint, { seen: new Set(deltaCache.map((d) => d.signature)) });
     if (fresh.length) { deltaCache = deltaCache.concat(fresh); writeFileSync(CACHE_FILE, JSON.stringify(deltaCache, (k, v) => (typeof v === "bigint" ? v.toString() : v))); }
-    return [];
+    return fresh;
   },
   balance: (a) => balanceOf(conns, a),
   sendMemo: (text) => sendMemo(conns, treasury, text),
@@ -66,6 +66,7 @@ const chain = {
 };
 
 async function claimAndSplit() {
+  if (process.env.CLAIM === "0") return; // no pump.fun on devnet: fees arrive by hand
   const got = await claimCreatorFees(conns, treasury, MINT, CLAIM_MIN);
   if (!got) return;
   log(`claim(${got.lamports} lamports) tx ${got.signature}`);
@@ -89,7 +90,7 @@ async function doors() {
     const s = (state.doors[id] ??= {});
     if (!s.committed && isSnapshotDue(id, now)) {
       const bonusPot = (await balanceOf(conns, bonus.publicKey)) - RESERVE;
-      const snap = await snapshot(chain, cfg, id, { cachedDeltas: deltaCache });
+      const snap = await snapshot(chain, cfg, id, { cachedDeltas: deltaCache.slice() });
       if (snap.winners === 0) { log(`door ${id}: nothing to draw (pot ${snap.pot}, eligible ${snap.rows.length})`); s.skipped = { pot: snap.pot.toString(), eligible: snap.rows.length }; save(); continue; }
       const c = await commit(chain, snap);
       log(`commit(door ${id}, snapshot ${snap.snapshotTime}, ${snap.rows.length} eligible, total ${snap.totalWeight}, hash ${snap.hash}, round ${snap.round}, ${snap.pot} lamports, ${snap.winners} winners) tx ${c.signature}`);

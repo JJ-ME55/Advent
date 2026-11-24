@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { replay, buildList, canonical, pickWinners, prizes } from "./drum.mjs";
 import { drandSignatures, seedOf, roundTime } from "./drand.mjs";
-import { connections, memosOf, parseCommit, heliusDeltas, withRpc, PublicKey } from "./solana.mjs";
+import { connections, memosOf, parseCommit, heliusDeltas, rpcDeltas, withRpc, PublicKey } from "./solana.mjs";
 import { COMMIT_MARGIN } from "./doors.mjs";
 
 const d = Number(process.argv[2]);
@@ -32,22 +32,22 @@ console.log(`Door ${d}: snapshot ${doc.snapshotTime}, ${doc.rows.length} eligibl
 if (!doc.result) { console.log("This door isn't settled yet."); process.exit(3); }
 
 // 1. the list
+const conns = connections();
 const rows = doc.rows.map((r) => ({ ...r, balance: BigInt(r.balance), weight: BigInt(r.weight), cumulativeBefore: BigInt(r.cumulativeBefore) }));
 const published = canonical({ door: d, mint: doc.mint, snapshotTime: doc.snapshotTime, snapshotSlot: doc.snapshotSlot, exclude: doc.exclude }, rows, BigInt(doc.totalWeight));
 const commitHash = /hash=([0-9a-f]{64})/.exec(doc.commit.memo)?.[1];
 ok(published.hash === commitHash, `the published list hashes to the committed hash (${commitHash})`);
 let rebuilt = null;
 try {
-  const deltas = await heliusDeltas(MINT);
+  const deltas = process.env.HELIUS_API_KEY ? await heliusDeltas(MINT) : await rpcDeltas(conns, MINT);
   const st = replay(deltas, doc.snapshotTime, { exclude: new Set(doc.exclude) });
   rebuilt = buildList(st, doc.snapshotTime);
   const again = canonical({ door: d, mint: doc.mint, snapshotTime: doc.snapshotTime, snapshotSlot: doc.snapshotSlot, exclude: doc.exclude }, rebuilt.rows, rebuilt.totalWeight);
   console.log(`INFO  ${deltas.length} balance changes replayed; ${rebuilt.rows.length} eligible wallets, total ${rebuilt.totalWeight}`);
   ok(again.hash === commitHash, `the list rebuilt from the chain's balance history hashes to the committed hash`);
-} catch (e) { skip(`couldn't rebuild the list from Helius: ${e.message}`); }
+} catch (e) { skip(`couldn't rebuild the list from the chain: ${e.message}`); }
 
 // 2. the commit
-const conns = connections();
 const memos = await memosOf(conns, TREASURY, { limit: 1000, filter: (m) => parseCommit(m)?.door === d });
 const rt = Number(roundTime(BigInt(doc.round)));
 if (memos.length === 0) skip("no commit memo from the treasury for this door was found in its last 1000 transactions");
