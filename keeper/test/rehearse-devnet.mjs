@@ -74,7 +74,7 @@ for (;;) {
   keeper();
   const f = join(out, "draws", "door--1.json");
   if (existsSync(f) && JSON.parse(readFileSync(f, "utf8")).result) break;
-  if (t > doorAt + 900) { log("gave up: the door never settled"); process.exit(1); }
+  if (t > doorAt + 2400) { log("gave up: the door never settled"); process.exit(1); }
   await new Promise((r) => setTimeout(r, 15_000));
 }
 const doc = JSON.parse(readFileSync(join(out, "draws", "door--1.json"), "utf8"));

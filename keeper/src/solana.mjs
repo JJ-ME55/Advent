@@ -131,27 +131,27 @@ export async function rpcDeltas(conns, mint, { seen = new Set(), tokenProgram = 
       }
     }
     const list = [...sigs.keys()];
-    const deltas = [];
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-    const fetchBatch = async (batch) => {
+    // one transaction per call, spaced out: public RPCs cap getParsedTransactions per method and count a batch as
+    // many calls. A 429 backs off up to a minute.
+    const fetchOne = async (sig) => {
       for (let attempt = 0; ; attempt++) {
-        try { return await c.getParsedTransactions(batch, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }); }
-        catch (e) { if (attempt >= 5 || !/429|Too many/i.test(e.message)) throw e; await sleep(500 * 2 ** attempt); }
+        try { return await c.getParsedTransaction(sig, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }); }
+        catch (e) { if (attempt >= 6 || !/429|Too many/i.test(e.message)) throw e; await sleep(1000 * 2 ** attempt); }
       }
     };
-    for (let i = 0; i < list.length; i += 20) {
-      if (i) await sleep(200); // public RPCs rate-limit this call
-      const txs = await fetchBatch(list.slice(i, i + 20));
-      for (const tx of txs) {
-        if (!tx || tx.meta?.err) continue;
-        const per = new Map();
-        const add = (b, sign) => { if (b.mint !== mintPk.toBase58() || !b.owner) return; per.set(b.owner, (per.get(b.owner) ?? 0n) + sign * BigInt(b.uiTokenAmount.amount)); };
-        for (const b of tx.meta.preTokenBalances ?? []) add(b, -1n);
-        for (const b of tx.meta.postTokenBalances ?? []) add(b, 1n);
-        let idx = 0;
-        const sig = tx.transaction.signatures[0];
-        for (const [owner, delta] of per) if (delta !== 0n) deltas.push({ owner, delta, time: tx.blockTime, slot: tx.slot, signature: sig, index: idx++ });
-      }
+    const deltas = [];
+    for (let i = 0; i < list.length; i++) {
+      if (i) await sleep(Number(process.env.RPC_TX_SPACING_MS ?? 150));
+      const tx = await fetchOne(list[i]);
+      if (!tx || tx.meta?.err) continue;
+      const per = new Map();
+      const add = (b, sign) => { if (b.mint !== mintPk.toBase58() || !b.owner) return; per.set(b.owner, (per.get(b.owner) ?? 0n) + sign * BigInt(b.uiTokenAmount.amount)); };
+      for (const b of tx.meta.preTokenBalances ?? []) add(b, -1n);
+      for (const b of tx.meta.postTokenBalances ?? []) add(b, 1n);
+      let idx = 0;
+      const sig = tx.transaction.signatures[0];
+      for (const [owner, delta] of per) if (delta !== 0n) deltas.push({ owner, delta, time: tx.blockTime, slot: tx.slot, signature: sig, index: idx++ });
     }
     return deltas.sort((a, b) => a.slot - b.slot || a.index - b.index);
   });
