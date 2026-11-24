@@ -3,14 +3,16 @@
 // verifier does. Not a unit test: run it by hand.
 //   node test/smoke-local.mjs
 import { Keypair, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { connections, withRpc, sendMemo, sendSol, memosOf, parseCommit, commitMemo, payoutMemo, balanceOf } from "../src/solana.mjs";
+import { connections, withRpc, sendMemo, sendSol, memosOf, parseCommit, commitMemo, payoutMemo, balanceOf, loadKeypair } from "../src/solana.mjs";
 
+// RPC_URL=https://api.devnet.solana.com TREASURY_KEYPAIR=../keys/treasury.json node test/smoke-local.mjs  (devnet, funded)
 process.env.RPC_URL ??= "http://127.0.0.1:8899";
 const conns = connections();
-const treasury = Keypair.generate(), a = Keypair.generate(), b = Keypair.generate();
+const treasury = process.env.TREASURY_KEYPAIR ? loadKeypair(process.env.TREASURY_KEYPAIR) : Keypair.generate();
+const a = Keypair.generate(), b = Keypair.generate();
 const log = (...x) => console.log(...x);
 
-await withRpc(conns, async (c) => { const s = await c.requestAirdrop(treasury.publicKey, 2 * LAMPORTS_PER_SOL); await c.confirmTransaction(s, "confirmed"); });
+if ((await balanceOf(conns, treasury.publicKey)) < BigInt(LAMPORTS_PER_SOL)) await withRpc(conns, async (c) => { const s = await c.requestAirdrop(treasury.publicKey, 2 * LAMPORTS_PER_SOL); await c.confirmTransaction(s, "confirmed"); });
 log("treasury", treasury.publicKey.toBase58(), "balance", await balanceOf(conns, treasury.publicKey));
 
 const hash = "ab".repeat(32);

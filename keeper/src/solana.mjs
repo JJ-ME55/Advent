@@ -86,7 +86,7 @@ export async function heliusDeltas(mint, { apiKey = process.env.HELIUS_API_KEY, 
   const deltas = [];
   let before = null, pages = 0, done = false;
   while (!done && pages++ < maxPages) {
-    const url = `https://api.helius.xyz/v0/addresses/${mint}/transactions?api-key=${apiKey}&limit=${pageLimit}${before ? `&before=${before}` : ""}`;
+    const url = `${process.env.HELIUS_BASE ?? "https://api.helius.xyz"}/v0/addresses/${mint}/transactions?api-key=${apiKey}&limit=${pageLimit}${before ? `&before=${before}` : ""}`;
     const r = await fetchFn(url, { signal: AbortSignal.timeout(30_000) });
     if (!r.ok) throw new Error(`helius ${r.status}: ${(await r.text()).slice(0, 200)}`);
     const txs = await r.json();
