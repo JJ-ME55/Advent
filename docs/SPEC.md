@@ -99,7 +99,7 @@ API (all reads public; writes wallet-signed with a nonce):
 | `POST /door/:d/open` | WIN + amount or no luck (after settle) |
 | `GET /winners/:d` | winners, amounts, tx links, verify data |
 | `GET /eligible/:wallet` | in the drum?, tickets, odds, hold time |
-| `POST /village/session` · `/pickup` · `/bank` | the game, server-judged |
+| `POST /village/session` · `/move` · `/pickup` · `/bank` | the game, server-judged (`docs/API.md`) |
 | `GET /bonus/:d` · `POST /bonus/:d/open` | entrants, claimed count, reveal |
 
 Data: Helius (free tier) for the mint's transfer history; a local SQLite ledger; drand via the Tombola lib.

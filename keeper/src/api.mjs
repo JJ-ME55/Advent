@@ -1,6 +1,6 @@
 // The site's API: reads what the keeper publishes (DRAWS_DIR/snapshot.json, door-<d>.json, deltas.json) and
-// answers wallet-signed requests. No database; everything is a file the keeper writes. The village game's
-// endpoints are stubs until the game exists.
+// answers wallet-signed requests. No database; everything is a file the keeper writes, plus the village's own
+// state file and the bonus entrants file the keeper reads at settle time (see village.mjs).
 //   PORT=8787 DRAWS_DIR=draws node src/api.mjs
 import { createServer } from "node:http";
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
@@ -11,6 +11,7 @@ import nacl from "tweetnacl";
 import bs58 from "bs58";
 import { replay, buildList, weightFor, MIN_BALANCE, ELIGIBLE_AFTER } from "./drum.mjs";
 import { doorTime, snapshotTime, nextDoor, LAST_DOOR } from "./doors.mjs";
+import { createVillage, FIRST_VILLAGE_DOOR } from "./village.mjs";
 
 const PORT = Number(process.env.PORT ?? 8787);
 const DRAWS_DIR = process.env.DRAWS_DIR ?? "draws";
@@ -56,6 +57,9 @@ function eligibility(wallet, at = now()) {
   return { wallet, holder: true, inDrum: w > 0n, balance: s.balance.toString(), holdStart: Number(s.holdStart), heldSeconds: held, tickets: w.toString(), totalTickets: totalWeight.toString(), odds: w > 0n && totalWeight > 0n ? Number((w * 1_000_000n) / totalWeight) / 1_000_000 : 0, reason };
 }
 
+const village = createVillage({ stateFile: process.env.VILLAGE_STATE_FILE ?? "state/village.json", entrantsFile: ENTRANTS_FILE, layoutFile: process.env.VILLAGE_LAYOUT_FILE, secret: process.env.VILLAGE_SECRET, isEligible: (w) => eligibility(w) });
+village.firstDoor = FIRST_VILLAGE_DOOR;
+
 const routes = {
   "GET /pot": () => { const s = snapshot(); return { at: s.at, pots: s.pots, claimed: s.claimed, nextDoor: s.nextDoor, nextDoorAt: s.nextDoorAt, totalPaid: Object.values(s.doors ?? {}).flatMap((d) => d.winners ?? []).reduce((a, w) => a + BigInt(w.lamports), 0n).toString(), wallets: s.wallets }; },
   "GET /door/:d": ({ d }) => {
@@ -74,11 +78,21 @@ const routes = {
     const listed = doc.rows.some((r) => r.account === v.wallet);
     return { door: Number(d), wallet: v.wallet, inDrum: listed, won: !!win, lamports: win?.lamports ?? "0", signature: win?.signature ?? null };
   },
-  "GET /bonus/:d": ({ d }) => { const e = readJson(ENTRANTS_FILE, {})[d] ?? []; const doc = door(Number(d)); return { door: Number(d), entrants: e.length, winners: doc?.result?.bonus?.length ?? 0 }; },
-  "POST /village/session": () => [501, { error: "the village isn't open yet" }],
-  "POST /village/pickup": () => [501, { error: "the village isn't open yet" }],
-  "POST /village/bank": () => [501, { error: "the village isn't open yet" }],
-  "POST /bonus/:d/open": () => [501, { error: "the bonus box isn't open yet" }],
+  // the village: a wallet signature starts the run (action `village`), then a session token carries it
+  "POST /village/session": (_, body) => { const v = verifySigned(body, "village"); if (v.error) return [401, v]; return village.session(v.wallet); },
+  "POST /village/move": (_, body) => village.move(body?.token, body?.pos),
+  "POST /village/pickup": (_, body) => village.pickup(body?.token, body?.coin, body?.pos),
+  "POST /village/bank": (_, body) => village.bank(body?.token, body?.pos),
+  "GET /village/layout": () => ({ spawn: village.layout.spawn, bank: village.layout.bank, coins: Number(process.env.VILLAGE_COINS ?? 20), firstDoor: village.firstDoor }),
+  "GET /village/map/:d": ({ d }) => village.map(Number(d)),
+  "GET /bonus/:d": ({ d }) => { const n = Number(d), doc = door(n), st = village.status(n); return { ...st, winners: doc?.result?.bonus?.length ?? 0, paid: doc?.result?.bonus?.reduce((a, w) => a + BigInt(w.lamports), 0n).toString() ?? "0" }; },
+  "POST /bonus/:d/open": ({ d }, body) => {
+    const v = verifySigned(body, `bonus-${d}`); if (v.error) return [401, v];
+    const n = Number(d), doc = door(n), entered = village.entrantsOf(n).includes(v.wallet);
+    if (!doc?.result) return [409, { error: "the box opens with the door", drawAt: doorTime(n), entered }];
+    const win = (doc.result.bonus ?? []).find((w) => w.account === v.wallet);
+    return { door: n, wallet: v.wallet, entered, won: !!win, lamports: win?.lamports ?? "0", signature: win?.signature ?? null, entrants: village.entrantsOf(n).length };
+  },
 };
 
 function match(method, path) {
@@ -108,4 +122,4 @@ const server = createServer(async (req, res) => {
 });
 export function start(port = PORT) { return new Promise((r) => server.listen(port, () => { console.log(`advent api on :${server.address().port}, draws from ${DRAWS_DIR}`); r(server); })); }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) start();
-export { eligibility, verifySigned, routes, server };
+export { eligibility, verifySigned, routes, server, village };
