@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Tombola</title>
+  <meta name="description" content="Tombola: hold the token, get tickets in the drum. ETH prize drops every few hours, drawn with drand randomness anyone can verify.">
+  <meta name="theme-color" content="#c8271c">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preload" href="fonts/rye-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/lora-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="fair.css">
+  <script src="config.js"></script>
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <!-- the curtain: drawn shut on arrival, opened by the button (src/curtain.js) -->
+  <div class="curtain" id="curtain" role="dialog" aria-modal="true" aria-labelledby="curtain-head" hidden>
+    <div class="curtain-panel curtain-l" aria-hidden="true"></div>
+    <div class="curtain-panel curtain-r" aria-hidden="true"></div>
+    <div class="curtain-top" aria-hidden="true"></div>
+    <div class="curtain-sign" data-bulbs="ring" data-bulb-pad="14" data-bulb-radius="22" data-bulb-step="24">
+      <p class="curtain-kicker">Tombola presents</p>
+      <h2 class="curtain-head" id="curtain-head">Step right up.</h2>
+      <p class="curtain-sub" id="curtain-sub"></p>
+      <button type="button" class="btn btn-red btn-big curtain-btn" id="curtain-btn">Let the show begin</button>
+    </div>
+  </div>
+  <div class="fair-bg" id="fair-bg" aria-hidden="true"></div>
+  <!-- the tannoy (src/announcer.js): the host heckles from the corner -->
+  <div class="tannoy" id="tannoy" aria-live="polite">
+    <div class="tannoy-bubble">
+      <p class="tannoy-text"></p>
+      <button type="button" class="tannoy-close" aria-label="Shut up">×</button>
+    </div>
+    <svg class="tannoy-horn" viewBox="0 0 120 120" aria-hidden="true">
+      <rect x="54" y="60" width="12" height="60" fill="#2c140d"/>
+      <rect x="40" y="112" width="40" height="8" rx="3" fill="#2c140d"/>
+      <path d="M22 44 L62 22 L62 78 L22 56 Z" fill="#c8271c" stroke="#2c140d" stroke-width="4" stroke-linejoin="round"/>
+      <ellipse cx="22" cy="50" rx="10" ry="16" fill="#e5a92b" stroke="#2c140d" stroke-width="4"/>
+      <path d="M62 22 Q104 28 108 50 Q104 72 62 78 Z" fill="#e5a92b" stroke="#2c140d" stroke-width="4" stroke-linejoin="round"/>
+      <ellipse cx="106" cy="50" rx="8" ry="28" fill="#fff2d6" stroke="#2c140d" stroke-width="4"/>
+      <path class="tannoy-wave" d="M114 34 Q124 50 114 66" fill="none" stroke="#fff1b8" stroke-width="4" stroke-linecap="round"/>
+      <path class="tannoy-wave" d="M118 24 Q134 50 118 76" fill="none" stroke="#fff1b8" stroke-width="4" stroke-linecap="round"/>
+    </svg>
+  </div>
+  <div class="awning" aria-hidden="true" data-bulbs="row" data-bulb-pad="0" data-bulb-step="32" data-bulb-offset="30"></div>
+  <div class="scallop scallop-top" aria-hidden="true"></div>
+
+  <header class="top">
+    <div class="strings" id="strings" aria-hidden="true"></div>
+    <div class="sign" data-bulbs="ring" data-bulb-pad="14" data-bulb-radius="34" data-bulb-step="24">
+      <span class="sign-lights" aria-hidden="true"></span>
+      <svg class="hat" aria-hidden="true" width="64" height="52" viewBox="0 0 64 52">
+        <path d="M15 4 H49 L50 38 H14 Z" fill="#2c140d"/>
+        <rect x="14" y="30" width="36" height="8" fill="#c8271c"/>
+        <ellipse cx="32" cy="42" rx="30" ry="6" fill="#2c140d"/>
+        <rect x="15" y="4" width="34" height="3" fill="#4a2a1f"/>
+      </svg>
+      <h1 class="wordmark">TOMBOLA</h1>
+      <p class="sign-sub">Hold the token. Get tickets. Win ETH. Stop being a coward.</p>
+      <button type="button" class="music" id="music-btn" aria-pressed="false" aria-label="Music" title="Music on">
+        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor"/>
+          <path class="m-wave" d="M16 9a4 4 0 0 1 0 6"/>
+          <path class="m-wave" d="M18.5 6.5a7.5 7.5 0 0 1 0 11"/>
+          <path class="m-off" d="M16 9l5 6M21 9l-5 6"/>
+        </svg>
+      </button>
+    </div>
+    <nav class="nav" aria-label="Sections">
+      <a href="#eligible">Am I in?</a>
+      <a href="#rules">Rules</a>
+      <a href="#winners">Winners</a>
+      <a href="#swarm">Ask the swarm</a>
+      <a href="#proofs">Proofs</a>
+      <a href="https://x.com/Tombola_RH" target="_blank" rel="noopener">X</a>
+    </nav>
+  </header>
+
+  <main>
+    <!-- 1. Next drop -->
+    <section class="hero" id="hero" aria-labelledby="pot-label">
+      <!-- the drum booth: sign, arrows and jackpot star are decoration (fair.css); the drum itself is src/cage.js -->
+      <div class="booth">
+        <div class="booth-sign" aria-hidden="true" data-bulbs="ring" data-bulb-pad="12" data-bulb-radius="20" data-bulb-step="22">Win ETH</div>
+        <div class="arrow arrow-l" aria-hidden="true" data-arrow="right"></div>
+        <div class="arrow arrow-r" aria-hidden="true" data-arrow="left"></div>
+        <div class="jackpot" aria-hidden="true">A winner<br>every<br>few hours</div>
+      <div class="drum" id="drum">
+        <canvas class="drum-canvas" id="drum-canvas" aria-hidden="true"></canvas>
+        <div class="plate" id="plate">
+          <div class="soon" id="soon" hidden>
+            <p class="kicker">Step right up</p>
+            <p class="soon-big">Launching soon</p>
+            <p class="soon-sub">First drop one hour after trading opens.</p>
+          </div>
+          <div class="pot-board" id="pot-board">
+            <p class="kicker" id="pot-label"><span id="regular-kind">Next drop</span></p>
+            <div class="countdown" id="regular-cd" role="timer" aria-label="Time to the next drop">
+              <span class="cd-num" data-h>--</span><span class="cd-sep" aria-hidden="true">:</span><span class="cd-num" data-m>--</span><span class="cd-sep" aria-hidden="true">:</span><span class="cd-num" data-s>--</span>
+            </div>
+            <p class="pot"><span class="pot-num" id="pot-eth">0.0000</span> <span class="pot-unit" id="pot-unit">ETH</span></p>
+            <p class="pot-usd" id="pot-usd"></p>
+            <p class="plate-line" id="plate-wallets"></p>
+          </div>
+        </div>
+      </div>
+      </div>
+      <p class="cd-note" id="regular-note">&nbsp;</p>
+      <div class="drum-demo" id="drum-demo" hidden>
+        <button type="button" class="btn btn-small" id="demo-buy">Buy</button>
+        <button type="button" class="btn btn-small" id="demo-buy10">Buy x10</button>
+        <button type="button" class="btn btn-small" id="demo-sell">Sell</button>
+        <button type="button" class="btn btn-small" id="demo-draw">Draw</button>
+      </div>
+
+      <div class="mega" id="mega-card">
+        <div class="mega-body">
+          <span class="mega-kicker">Weekly mega</span>
+          <span class="mega-pot"><span id="mega-eth">0.0000</span> ETH</span>
+          <span class="mega-usd" id="mega-usd"></span>
+        </div>
+        <div class="mega-stub">
+          <span class="mega-in">drops in</span>
+          <span class="mega-cd" id="mega-cd" role="timer" aria-label="Time to the mega drop">--</span>
+          <span class="mega-when" id="mega-when"></span>
+        </div>
+      </div>
+
+      <div class="ribbon" aria-hidden="true"><span class="tail tail-l"></span><span class="tail tail-r"></span>Everybody's a winner</div>
+      <p class="in-drum" id="in-drum"></p>
+      <a class="btn btn-ink buy-top" href="https://pons.fun" target="_blank" rel="noopener" data-buy>Buy $TOMBOLA</a>
+    </section>
+
+    <!-- 2. How it works -->
+    <section class="how" aria-label="How it works">
+      <div class="how-grid">
+        <div class="how-card">
+          <span class="rosette" aria-hidden="true">1</span>
+          <div><h2>Hold the fucking token</h2><p>At least 10,000 of them, held for 30 minutes before the snapshot, which is taken ten minutes before each drop. Thirty minutes. You can manage that, you twitchy gremlin.</p></div>
+        </div>
+        <div class="how-card">
+          <span class="rosette" aria-hidden="true">2</span>
+          <div><h2>Tickets pile up</h2><p>Tickets are your balance times a hold multiplier, 1x to 3x over 72 hours. Sell or send and the clock resets to zero, because you're a coward and the drum knows it.</p></div>
+        </div>
+        <div class="how-card">
+          <span class="rosette rosette-red" aria-hidden="true">3</span>
+          <div><h2>The drum spins</h2><p>Every drop pays the whole pot in ETH to one wallet, picked by drand randomness committed before anyone could know it and checked by the contract itself. Nobody's thumb on the scale. Not even mine, you suspicious little shit.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. Am I in the drum -->
+    <section class="wrap panel-in" id="eligible" aria-labelledby="elig-h">
+      <h2 class="h-red stall-sign" id="elig-h" data-bulbs="ring" data-bulb-pad="10" data-bulb-radius="14" data-bulb-step="22" data-bulb-r="3.5">Am I in the drum?</h2>
+      <form class="elig-form" id="elig-form" autocomplete="off">
+        <label for="wallet" class="sr">Wallet address</label>
+        <input id="wallet" name="wallet" inputmode="text" spellcheck="false" placeholder="Paste a wallet, 0x...">
+        <button type="submit" class="btn btn-red">Check</button>
+      </form>
+      <div class="elig-out ticket-card" id="elig-out" hidden>
+        <div class="admit" aria-hidden="true">Admit one</div>
+        <div class="elig-body">
+          <p class="verdict" id="verdict"></p>
+          <dl class="facts">
+            <div><dt>Balance</dt><dd id="e-bal">-</dd></div>
+            <div><dt>Held for</dt><dd id="e-held">-</dd></div>
+            <div><dt>Multiplier</dt><dd id="e-mult">-</dd></div>
+            <div><dt>Tickets</dt><dd id="e-weight">-</dd></div>
+            <div><dt>Odds right now</dt><dd id="e-odds">-</dd></div>
+            <div><dt>Eligible in</dt><dd id="e-wait">-</dd></div>
+          </dl>
+          <p class="fine" id="e-note"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. The rules -->
+    <section class="rules" id="rules" aria-labelledby="rules-h">
+      <div class="wrap">
+        <h2 id="rules-h"><span class="banner-title">The rules of the game</span></h2>
+
+        <div class="split-card">
+          <p class="split-lead">Every buy and every sell pays 6%. Where it goes:</p>
+          <div class="split-rosettes">
+            <span class="rosette rosette-lg"><span class="rs-num">4%</span><span class="rs-lbl">Drop pot</span></span>
+            <span class="rosette rosette-lg"><span class="rs-num">1%</span><span class="rs-lbl">Mega</span></span>
+            <span class="rosette rosette-lg"><span class="rs-num">0.7%</span><span class="rs-lbl">Team</span></span>
+            <span class="rosette rosette-lg"><span class="rs-num">0.3%</span><span class="rs-lbl">Launchpad</span></span>
+            <span class="rs-eq" aria-hidden="true">=</span>
+            <span class="rosette rosette-lg rosette-red"><span class="rs-num">6%</span><span class="rs-lbl">Tax</span></span>
+          </div>
+          <div class="split-bar" aria-hidden="true"><span class="sb-pot"></span><span class="sb-mega"></span><span class="sb-team"></span><span class="sb-pad"></span></div>
+          <ul class="split-legend">
+            <li><span class="dot dot-red" aria-hidden="true"></span><span class="pc">4%</span><span>Drop pot</span></li>
+            <li><span class="dot dot-gold" aria-hidden="true"></span><span class="pc">1%</span><span>Weekly mega</span></li>
+            <li><span class="dot dot-ink" aria-hidden="true"></span><span class="pc">0.7%</span><span>Team</span></li>
+            <li><span class="dot dot-pad" aria-hidden="true"></span><span class="pc">0.3%</span><span>Launchpad</span></li>
+          </ul>
+          <p class="split-note">That is Tombola's 5% creator tax plus the launchpad's 1%. Prizes are paid in ETH. The tax is charged on the trade, not inside the token: sending tokens wallet to wallet is free.</p>
+        </div>
+
+        <ol class="rule-list">
+          <li><span class="rn">1</span><p><strong>When.</strong> A drop every hour for the first 6 hours after launch, then every 4 hours. A mega drop once a week.</p></li>
+          <li><span class="rn">2</span><p><strong>Who's in.</strong> Hold <span id="min-bal">10,000</span> <span data-ticker>TOMBOLA</span> or more for 30 minutes before the snapshot. The snapshot is taken ten minutes before the drop; the clock then runs down to the payout.</p></li>
+          <li><span class="rn">3</span><p><strong>Tickets.</strong> Balance times hold multiplier, 1x to 3x over 72 hours. Selling or sending resets the clock. Tokens you receive count as brand new.</p></li>
+          <li><span class="rn">4</span><p><strong>Who's out.</strong> The trading pool, the launch contracts and Tombola's own contracts sit out every draw. Everyone else holding is in.</p></li>
+          <li><span class="rn">5</span><p><strong>drand picks.</strong> The keeper commits to a future drand round, takes the snapshot, publishes the list, and the contract pays only a winner proven against that list. The signature is checked on-chain. No re-roll. Press Verify on any ticket and your browser re-does it.</p></li>
+          <li><span class="rn">6</span><p><strong>Hands off.</strong> No mint, no owner, no pause, no blacklist, no withdraw: the pots only ever leave as prizes. A cold guardian wallet can cancel a draw before it settles, and that's all it can do.</p></li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- 5. Last winners -->
+    <section class="wrap panel-in" id="winners" aria-labelledby="win-h">
+      <h2 class="h-red stall-sign" id="win-h" data-bulbs="ring" data-bulb-pad="10" data-bulb-radius="14" data-bulb-step="22" data-bulb-r="3.5">Last winners</h2>
+      <p class="lead">The lucky bastards. Press Verify on any ticket and your browser redoes the whole draw from public chain data, so you can stop whingeing that it's rigged. A wallet with no pool buy before the draw gets a red tag.</p>
+      <ol class="win-list" id="win-list"><li class="empty">No drops yet.</li></ol>
+      <details class="rpc-box">
+        <summary>Verify with your own RPC (optional)</summary>
+        <label class="fine verify-rpc">RPC URL
+          <input id="verify-rpc" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://your-node.example">
+        </label>
+        <p class="fine">Leave empty to use the site's RPC. Your RPC must be allowed by this site's settings (config <code>extraConnect</code>, or <code>localRpcPorts</code> for localhost); otherwise run <code>bot/pons/verify-draw.mjs</code> yourself.</p>
+      </details>
+    </section>
+
+    <!-- 6. Ask the swarm -->
+    <section class="swarm" id="swarm" aria-labelledby="swarm-h">
+      <div class="wrap swarm-card">
+        <div class="swarm-text">
+          <h2 class="h-red" id="swarm-h">Ask the swarm</h2>
+          <p class="lead">Don't trust me. I'm a loudspeaker on a stick. Anyone can ask IMD's swarm to check the recent draws on its own: the randomness, who was excluded, and whether the team could have touched the result. One press every 6 hours. The answer is posted here and on X, you paranoid little fuck.</p>
+          <div class="swarm-last" id="swarm-last"></div>
+        </div>
+        <div class="swarm-action">
+          <div class="orb" aria-hidden="true"><span class="orb-base"></span></div>
+          <button class="btn btn-red btn-big" id="swarm-btn" type="button" disabled>Ask the swarm</button>
+          <p class="swarm-cd" id="swarm-cd"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7. Proofs and contract address -->
+    <div class="wrap proofs-grid">
+      <section class="proofs" id="proofs" aria-labelledby="proofs-h">
+        <h2 class="h-red" id="proofs-h">Proofs</h2>
+        <p class="backed" id="backed"><span class="backed-dot" aria-hidden="true"></span><span id="backed-text">Checking the pots...</span></p>
+        <ul class="addr-list" id="addr-list"></ul>
+        <div class="swarm-last" id="proof-swarm"></div>
+      </section>
+
+      <section class="ca" id="ca" aria-labelledby="ca-h">
+        <h2 class="h-red" id="ca-h">Contract address</h2>
+        <div class="ca-row">
+          <code id="ca-addr">Not launched yet</code>
+          <button class="btn btn-gold" id="ca-copy" type="button" disabled>Copy</button>
+        </div>
+        <p class="fine">Robinhood Chain · paired with ETH.</p>
+        <a class="btn btn-red buy-ca" href="https://pons.fun" target="_blank" rel="noopener" data-buy>Buy $TOMBOLA</a>
+      </section>
+    </div>
+  </main>
+
+  <div class="scallop scallop-foot" aria-hidden="true"></div>
+  <footer class="foot">
+    <p class="foot-box">No accounts, no tracking, no bullshit. Every number comes straight from the contracts on Robinhood Chain. Shout at us on <a href="https://x.com/Tombola_RH" target="_blank" rel="noopener">X</a>. <span id="freshness"></span></p>
+  </footer>
+
+  <template id="win-tpl">
+    <li class="ticket">
+      <div class="t-stub"><span class="t-round"></span><span class="t-track"></span></div>
+      <div class="t-body">
+        <p class="t-amt"></p>
+        <p class="t-who"><a class="t-wallet" target="_blank" rel="noopener"></a> <span class="t-tags"></span></p>
+        <p class="t-meta"></p>
+        <div class="t-actions">
+          <a class="t-tx" target="_blank" rel="noopener">Payout tx</a>
+          <button class="btn btn-paper btn-small t-verify" type="button">Verify</button>
+        </div>
+      </div>
+      <!-- a child of the ticket, so it can span the stub column on a phone [R10 Info 13] -->
+      <ol class="checks" hidden></ol>
+    </li>
+  </template>
+</body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "name": "tombola-site",
+  "private": true,
+  "type": "module",
+  "description": "Tombola static site: pot, countdowns, eligibility, winners with in-browser verify",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:local": "node scripts/build.mjs --local",
+    "build:noabis": "node scripts/build.mjs --no-abis",
+    "test": "node scripts/verify-test.mjs",
+    "selftest": "node scripts/selftest.mjs",
+    "serve": "node scripts/serve.mjs",
+    "demo": "node scripts/demo-local.mjs",
+    "mock": "node scripts/mock-snapshot.mjs"
+  },
+  "devDependencies": {
+    "@fontsource/lora": "^5.1.0",
+    "@fontsource/rye": "^5.1.0",
+    "esbuild": "^0.24.0",
+    "viem": "^2.21.54"
+  },
+  "dependencies": {
+    "matter-js": "^0.20.0"
+  }
+}

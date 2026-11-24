@@ -1,0 +1,14 @@
+{
+  "name": "drop-bot",
+  "private": true,
+  "type": "module",
+  "description": "Keeper and verify-drop script for the Drop Token vault",
+  "scripts": {
+    "keeper": "node keeper.mjs",
+    "verify": "node verify-drop.mjs",
+    "test": "node --test test/replay.test.mjs test/launch.test.mjs test/round7.test.mjs test/round8-launch.test.mjs test/round9.test.mjs test/round10.test.mjs"
+  },
+  "dependencies": {
+    "viem": "2.21.54"
+  }
+}
