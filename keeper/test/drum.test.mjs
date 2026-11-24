@@ -79,6 +79,7 @@ test("wordFor separates door, pick and tag", () => {
   assert.notEqual(wordFor(seed, 1, 1), wordFor(seed, 1, 2));
   assert.notEqual(wordFor(seed, 1, 1), wordFor(seed, 2, 1));
   assert.notEqual(wordFor(seed, 1, 1), wordFor(seed, 1, 1, "bonus"));
+  assert.notEqual(wordFor(seed, -1, 1), wordFor(seed, 0, 1), "warm-up doors (0 and negative) have their own words");
 });
 
 test("winnerCount follows the curve, the prize floor and the eligible count", () => {

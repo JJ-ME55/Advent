@@ -87,7 +87,7 @@ export const sha256Hex = (data) => createHash("sha256").update(data).digest("hex
 export function wordFor(seedHex, door, k, tag = "") {
   const h = createHash("sha256");
   h.update(Buffer.from(seedHex.replace(/^0x/, ""), "hex"));
-  const b = Buffer.alloc(8); b.writeUInt32BE(door, 0); b.writeUInt32BE(k, 4);
+  const b = Buffer.alloc(8); b.writeInt32BE(door, 0); b.writeUInt32BE(k, 4); // door may be 0 or negative (warm-up doors)
   h.update(b);
   if (tag) h.update(Buffer.from(tag, "utf8"));
   return BigInt("0x" + h.digest("hex"));
