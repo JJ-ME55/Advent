@@ -49,7 +49,7 @@ export function openedSvg({ door, sol, grandSol, winners, grandWallet, eligible,
   ${big(`${sol} SOL`, 300, 110)}
   ${line(`${winners} ${winners === 1 ? "winner" : "winners"} from ${eligible} in the drum`, 360)}
   ${line(`Grand prize ${grandSol} SOL to ${grandWallet}`, 410, 30, C.gold)}
-  ${line(`${ticker} · every door pays · the list and the draw are public`, 470, 24)}`;
+  ${line(`${ticker} · every door pays · list and draw are public`, 470, 22)}`;
   return frame(inner, { accent: C.gold });
 }
 
