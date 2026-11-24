@@ -12,6 +12,7 @@ import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync } from "
 import { join } from "node:path";
 import { connections, loadKeypair, balanceOf, sendSol, sendMemo, heliusDeltas, rpcDeltas, PublicKey, LAMPORTS_PER_SOL } from "./solana.mjs";
 import { snapshot, commit, settle } from "./draw.mjs";
+import { replay, buildList } from "./drum.mjs";
 import { nextDoor, isSnapshotDue, isSettleDue, doorTime, doorRoundTime, LAST_DOOR } from "./doors.mjs";
 import { claimCreatorFees } from "./claim.mjs";
 
@@ -123,8 +124,10 @@ async function publish() {
   const [t, dw, xw, bw] = await Promise.all([treasury.publicKey, door.publicKey, xmas, bonus.publicKey].map((a) => balanceOf(conns, a)));
   const now = chain.now();
   const next = nextDoor(now);
+  let eligibleNow = null, totalTicketsNow = null;
+  try { const { rows, totalWeight } = buildList(replay(deltaCache, now, { exclude: new Set(EXCLUDE) }), now); eligibleNow = rows.length; totalTicketsNow = totalWeight.toString(); } catch { /* incomplete history: leave null */ }
   const out = {
-    at: now, mint: MINT, wallets: Object.fromEntries(Object.entries(wallets).map(([k, v]) => [k, v.toBase58()])), treasury: treasury.publicKey.toBase58(),
+    at: now, mint: MINT, eligibleNow, totalTicketsNow, wallets: Object.fromEntries(Object.entries(wallets).map(([k, v]) => [k, v.toBase58()])), treasury: treasury.publicKey.toBase58(),
     pots: { treasury: t.toString(), door: (dw > RESERVE ? dw - RESERVE : 0n).toString(), xmas: xw.toString(), bonus: (bw > RESERVE ? bw - RESERVE : 0n).toString() },
     claimed: state.claimed, nextDoor: next, nextDoorAt: next ? doorTime(next) : null, exclude: EXCLUDE,
     doors: Object.fromEntries(Object.entries(state.doors).map(([k, v]) => [k, { committed: !!v.committed, settled: !!v.settled, winners: v.settled?.winners?.map((w) => ({ account: w.account, lamports: w.lamports, signature: w.signature })) ?? [], eligible: v.snapshot?.rows?.length ?? null, pot: v.snapshot?.pot ?? null }])),
