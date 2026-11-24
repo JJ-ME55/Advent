@@ -132,7 +132,7 @@ async function publish() {
     claimed: state.claimed, nextDoor: next, nextDoorAt: next ? doorTime(next) : null, exclude: EXCLUDE,
     doors: Object.fromEntries(Object.entries(state.doors).map(([k, v]) => [k, { committed: !!v.committed, settled: !!v.settled, winners: v.settled?.winners?.map((w) => ({ account: w.account, lamports: w.lamports, signature: w.signature })) ?? [], eligible: v.snapshot?.rows?.length ?? null, pot: v.snapshot?.pot ?? null }])),
   };
-  writeFileSync(join(DRAWS_DIR, "snapshot.json"), JSON.stringify(out, null, 1));
+  writeFileSync(join(DRAWS_DIR, "snapshot.json"), JSON.stringify(out, (k, v) => (typeof v === "bigint" ? v.toString() : v), 1));
 }
 
 async function tick() {
