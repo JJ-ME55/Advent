@@ -52,10 +52,13 @@ const memos = await memosOf(conns, TREASURY, { limit: 1000, filter: (m) => parse
 const rt = Number(roundTime(BigInt(doc.round)));
 if (memos.length === 0) skip("no commit memo from the treasury for this door was found in its last 1000 transactions");
 else {
-  const c = parseCommit(memos[memos.length - 1].memo); // the earliest
-  const m = memos[memos.length - 1];
-  ok(c.hash === published.hash && c.round === BigInt(doc.round) && c.winners === doc.winners && c.total === BigInt(doc.totalWeight), `the commit memo (${m.signature.slice(0, 12)}…) pins this hash, round, total and winner count`);
-  ok(m.blockTime != null && m.blockTime <= rt - COMMIT_MARGIN, `the commit landed at ${m.blockTime}, at least ${COMMIT_MARGIN} s before the round's time ${rt}`);
+  // the earliest memo that pins this list; other commits for the same door number (rehearsals reuse door numbers) are noted
+  const mine = memos.filter((m) => parseCommit(m.memo)?.hash === published.hash);
+  const others = memos.length - mine.length;
+  if (others) console.log(`INFO  ${others} other commit memo${others === 1 ? "" : "s"} for door ${d} with a different list (ignored)`);
+  const m = mine[mine.length - 1], c = m && parseCommit(m.memo);
+  ok(!!m && c.round === BigInt(doc.round) && c.winners === doc.winners && c.total === BigInt(doc.totalWeight), m ? `the commit memo (${m.signature.slice(0, 12)}…) pins this hash, round, total and winner count` : "no commit memo pins this list's hash");
+  if (m) ok(m.blockTime != null && m.blockTime <= rt - COMMIT_MARGIN, `the commit landed at ${m.blockTime}, at least ${COMMIT_MARGIN} s before the round's time ${rt}`);
 }
 
 // 3. drand
