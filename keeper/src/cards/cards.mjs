@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { initWasm, Resvg } from "@resvg/resvg-wasm";
 import { W } from "./templates.mjs";
-export { openedSvg, countdownSvg, jackpotSvg } from "./templates.mjs";
+export { openedSvg, claimSvg, countdownSvg, jackpotSvg } from "./templates.mjs";
 
 const require = createRequire(import.meta.url);
 const wasmPath = require.resolve("@resvg/resvg-wasm/index_bg.wasm");

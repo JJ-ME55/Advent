@@ -6,8 +6,9 @@ payouts from the hot wallets.
 ## Before
 1. **Wallets.** `keys/treasury.json` is the coin's creator and the pump.fun creator-fee wallet: the coin MUST be
    created from this wallet (import the keypair into Phantom, or create through pump's API with it), or the fees go
-   elsewhere. Fund it with ~0.1 SOL. `door.json` and `bonus.json` pay out and need ~0.05 SOL each for gas; the
-   keeper's `RESERVE_SOL` keeps that back. `XMAS_WALLET` and `TEAM_WALLET` are cold addresses of your choice.
+   elsewhere. Fund it with ~0.1 SOL. `door.json` and `bonus.json` pay the claims (from the API process, which needs
+   both keys) and need ~0.05 SOL each for gas; the keeper's `RESERVE_SOL` keeps that back. `XMAS_WALLET` and
+   `TEAM_WALLET` are cold addresses of your choice.
 2. **Hetzner.** `deploy/README.md`. Keys copied by hand, `.env` filled, services enabled but the keeper waits: it
    refuses to start without `MINT`.
 3. **Fish.** Site pointed at the API; the exclusion list agreed (team wallets).
@@ -25,7 +26,10 @@ payouts from the hot wallets.
 
 ## Door 1 (1 Dec, 17:50 snapshot, 18:00 open)
 - 17:50: `commit(door 1, …)` in the log; `draws/door-1.json` published; the site shows "locked in".
-- 18:00:05: `settle(door 1) -> …` lines, one per winner; the poster posts the opened card within a minute.
+- 18:00:05: `settle(door 1) -> winner k: … awaiting claim` lines, one per winner; nothing is sent. The poster posts
+  "Door 1 is open: X SOL waiting for N winners" within a minute.
+- Holders open their doors on the site; winners press Claim: `claim(door 1, 7xKq…3fP, 1234 lamports) -> <sig>` in
+  the API's log (`journalctl -u advent-api -f`), and a claim card from the poster.
 - `node keeper/src/verify-door.mjs 1` from anywhere with the env set: must end "Verified".
 
 ## If
@@ -35,3 +39,5 @@ payouts from the hot wallets.
   settles it; the site's countdown shows the new time.
 - **A wrong list:** the window between commit and round is the time to stop a door. There is no on-chain cancel;
   the keeper simply doesn't settle and the pot stays in the door wallet for the next door. Say so publicly.
+- **Unclaimed prizes** sit in the door/bonus wallets indefinitely (`unclaimedLamports` in `GET /winners/:d`). No
+  rule yet; `CLAIM_DEADLINE_SECONDS` in `.env` when there is one.

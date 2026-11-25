@@ -39,7 +39,7 @@ test("doors: times, rounds and due windows", () => {
   assert.equal(isSettleDue(1, doorRoundTime(1)), false);
 });
 
-test("a door end to end: snapshot, commit, settle, and the result recomputes", async () => {
+test("a door end to end: snapshot, commit, settle (pays nothing), and the result recomputes", async () => {
   const t0 = snapshotTime(3);
   const deltas = [
     { owner: "CURVE", delta: 1_000_000_000n * UNIT, time: t0 - 90_000, slot: 1, signature: "mint", index: 0 },
@@ -77,11 +77,13 @@ test("a door end to end: snapshot, commit, settle, and the result recomputes", a
   const expected = pickWinners(snap.rows, seedOf(SIG), 3, 1)[0];
   assert.equal(res.winners[0].account, expected.account, "anyone recomputes the winner from the list and the seed");
   assert.deepEqual(prizes(snap.pot, 1), [snap.pot]);
-  const pay = chain.sent.find((s) => s.to === res.winners[0].account);
-  assert.match(pay.memo, new RegExp(`^ADVENT door door=3 winner=1/1 hash=${snap.hash}$`));
+  assert.equal(res.winners[0].memo, `ADVENT door door=3 winner=1/1 hash=${snap.hash}`, "the memo the claim will carry");
   assert.equal(res.bonus.length, 2, "two distinct entrants, two bonus winners");
-  assert.equal(res.bonus.reduce((a, b) => a + b.lamports, 0n), 1_000_000_000n, "the bonus pot is paid in full");
-  assert.ok(chain.sent.filter((s) => /ADVENT bonus/.test(s.memo)).length === 2);
+  assert.equal(res.bonus.reduce((a, b) => a + b.lamports, 0n), 1_000_000_000n, "the whole bonus pot is allotted");
+  assert.ok(res.bonus.every((b) => /^ADVENT bonus door=3 winner=\d\/2/.test(b.memo)));
+  // it's an advent calendar: settle fixes the winners and sends nothing; they're paid when they open and claim
+  assert.deepEqual(chain.sent.filter((s) => s.to), [], "settle sends nothing");
+  assert.equal(chain.sent.length, 1, "the only transaction so far is the commit memo");
 });
 
 test("snapshot refuses a history that leaves a wallet negative", async () => {

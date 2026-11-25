@@ -7,9 +7,9 @@ the choice and the reason are stated. Open decisions are at the end.
 
 A Christmas memecoin on Solana whose trading fees fill a door every day. The site is an advent calendar. At door
 time the backend draws that day's winners from the eligible holders using drand's public randomness; each holder
-opens the door to see if they won (the draw happens first, the door only reveals it). Payouts are sent
-automatically. A Bonus Box per day rewards holders who finish the North Pole village game. Christmas Day is the
-mega door.
+opens the door to see if they won (the draw happens first, the door only reveals it). Nobody is told they've won
+until they open their door, and nothing is paid until they press Claim: the prize then goes to that wallet. A Bonus
+Box per day rewards holders who finish the North Pole village game, the same way. Christmas Day is the mega door.
 
 ## 2. Timeline
 
@@ -34,7 +34,7 @@ bigger launch; v1 is pump.fun with prizes scaled to the real fee. Decision 1 bel
 (Fish: 3% rewards / 0.5% team of 3.5% ≈ 86/14. With 1% in, 10% team is ~0.1% of volume; the 10% burn from draft 1
 is dropped in favour of the Bonus Box pot. Burns can come back from the team share if wanted.)
 
-## 4. Eligibility (the drum)
+## 4. Eligibility (Santa's Nice List)
 
 Same rule as Tombola, ported:
 - balance ≥ **MIN** (start: 100,000 of the 1B supply = 0.01%), held ≥ **30 min** before the snapshot;
@@ -54,10 +54,15 @@ Same rule as Tombola, ported:
 - **Prizes:** winner 1 (the grand) takes 40% of the door; the rest is split equally. With 1 winner, all of it.
 - **Randomness:** drand round `r`, `seed = sha256(signature)`; winner k: `word_k = sha256(seed ‖ d ‖ k)`,
   `target = word_k mod W_k` over the list with earlier winners removed. Deterministic, recomputable.
-- **Settle** at `T + 5 s`: SOL transfers from the door wallet, memo `ADVENT door=d winner=k/n hash=<listHash>`.
-  Payout lands as the countdown hits zero.
-- **Reveal:** `POST /door/:d/open` (wallet-signed) answers WIN + amount or no luck, once per wallet per day; the
-  site animates the door. Past doors show every winner and the transactions.
+- **Settle** at `T + 5 s`: the keeper fixes the winners and their amounts (door, winner list, lamports each, the
+  drand round, the list hash) and **sends nothing**. The money stays in the door wallet until claimed.
+- **Reveal:** `POST /door/:d/open` (wallet-signed) answers WIN + amount or no luck, for any settled door, any day;
+  the site animates the door. A winner presses Claim: `POST /door/:d/claim` (a second signed message) pays that
+  wallet from the door wallet, once, memo `ADVENT door door=d winner=k/n hash=<listHash>`.
+- **No spoilers:** the published door names a winner only once they've opened. Prize sizes, the list, the hash, the
+  round and the seed are public, so anyone can recompute who won; the site just doesn't say.
+- **Unclaimed prizes** stay in their wallets. The rule (a deadline, roll into the Christmas pot) isn't decided;
+  `CLAIM_DEADLINE_SECONDS` exists for when it is (default: none).
 - **Verify:** `verify-door.mjs d` and the site's Verify rebuild the list from the chain, check the hash against the
   commit memo and the memo's time against the round, check drand's signature from three relays, recompute the
   winners and find their payout transactions.
@@ -94,20 +99,20 @@ API (all reads public; writes wallet-signed with a nonce):
 
 | Endpoint | Returns / does |
 |---|---|
-| `GET /pot` | fees collected, today's door pot, Christmas pot, bonus pot, total paid |
+| `GET /pot` | fees collected, today's door pot, Christmas pot, bonus pot, total won, total paid |
 | `GET /door/:d` | locked/open, winner count, eligible count, countdown |
-| `POST /door/:d/open` | WIN + amount or no luck (after settle) |
-| `GET /winners/:d` | winners, amounts, tx links, verify data |
-| `GET /eligible/:wallet` | in the drum?, tickets, odds, hold time |
+| `POST /door/:d/open` · `/claim` | WIN + amount or no luck (any settled door); claim pays once |
+| `GET /winners/:d` | prize counts and totals, verify data, and only the winners who have opened |
+| `GET /eligible/:wallet` | on the Nice List?, tickets, odds, hold time |
 | `POST /village/session` · `/move` · `/pickup` · `/bank` | the game, server-judged (`docs/API.md`) |
-| `GET /bonus/:d` · `POST /bonus/:d/open` | entrants, claimed count, reveal |
+| `GET /bonus/:d` · `POST /bonus/:d/open` · `/claim` | entrants, claimed count, reveal, claim |
 
 Data: Helius (free tier) for the mint's transfer history; a local SQLite ledger; drand via the Tombola lib.
 
 ## 9. Content
 
 Reveal video per door (30–45 s, auto-rendered from the result), countdown clip every 4 h, winner cards on X within
-a minute, bonus-box winners, burns if any. Voice: the carnival barker in a Santa hat; the fairground music with
+a minute (door opened: how much for how many, "open yours"; a claim: the wallet shortened), burns if any. Voice: the carnival barker in a Santa hat; the fairground music with
 sleigh bells. The X bot from Tombola, run on the Hetzner box next to the keeper (no Cloudflare).
 
 ## 10. Build plan
@@ -127,7 +132,7 @@ sleigh bells. The X bot from Tombola, run on the Hetzner box next to the keeper 
 2. **Split:** 70 / 10 / 10 / 10 (door / Christmas / bonus / team).
 3. **Winner curve:** Fish's table + the $20 floor; grand 40%, rest equal.
 4. **Eligibility:** 100k tokens, 30 min, 1×→3× over 72 h.
-5. **Payout:** auto-send.
+5. **Payout:** on claim, after opening the door (Fish, 25 Nov). Unclaimed prizes: rule still open.
 6. **Draw method:** drand + published snapshot + commit memo (as above).
 7. **Doors:** 25, with the Christmas finale.
 8. **Backend:** Hetzner, plain HTTP for the village.

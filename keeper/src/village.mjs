@@ -1,11 +1,11 @@
 // The North Pole village, server side (the judge). Fish draws it; this decides what counts.
 //
 // Each door d has a day's map: 20 coins hidden at 20 of the village's hiding spots, chosen from a secret so the
-// positions change every day and can't be read from the client. A holder in the drum starts one session per door,
+// positions change every day and can't be read from the client. A holder on the Nice List (the eligibility list) starts one session per door,
 // walks about (the client pings positions, the server reveals coins within REVEAL_RADIUS), picks coins up (checked
 // for distance, speed and pace) and banks them at the bank. Banking 20 enters the wallet for the door's Bonus Box;
 // the keeper draws 10 winners from the entrants with the door's drand round at settle time. Entries close at the
-// door's snapshot time, like the drum. After that the day's map is public (GET /village/map/:d) so anyone can see
+// door's snapshot time, like the Nice List. After that the day's map is public (GET /village/map/:d) so anyone can see
 // where the coins were.
 //
 // State is one JSON file (sessions per door) plus the entrants file the keeper reads: { "<door>": [wallets] }.
@@ -87,7 +87,7 @@ export function createVillage({ stateFile, entrantsFile, layoutFile, layout: giv
       if (d === null) return [410, { error: "the village is closed for the season" }];
       if (t < doorTime(d - 1)) return [503, { error: `door ${d}'s village opens when door ${d - 1} does`, opensAt: doorTime(d - 1), door: d }]; // one day's map at a time
       const e = isEligible ? isEligible(wallet) : { inDrum: true };
-      if (!e.inDrum) return [403, { error: "only holders in the drum can play", reason: e.reason ?? null, eligibility: e }];
+      if (!e.inDrum) return [403, { error: "only holders on Santa's Nice List can play", reason: e.reason ?? null, eligibility: e }];
       state.sessions[d] ??= {};
       let s = state.sessions[d][wallet], created = false;
       if (!s) {

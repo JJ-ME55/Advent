@@ -2,10 +2,12 @@
 
 ```
 /opt/advent/            git checkout of this repo (user: advent)
-/opt/advent/keys/       treasury.json door.json bonus.json  (0600, owner advent) — xmas and team are cold, pubkeys only
+/opt/advent/keys/       treasury.json door.json bonus.json  (0600, owner advent) — xmas and team are cold, pubkeys only.
+                        The API needs door.json and bonus.json too: it pays the claims.
 /opt/advent/.env        from .env.example
 /opt/advent/draws/      published files; served read-only by the API and synced to the site's CDN
-/opt/advent/state/      keeper, poster and bonus-entrant state
+/opt/advent/state/      keeper, poster, village and bonus-entrant state; results/ (settled doors in full) and
+                        claims.json, shared between the keeper (writes results, reads claims) and the API (the reverse)
 ```
 
 ```sh

@@ -2,14 +2,17 @@
 //   1. a throwaway mint (6 decimals) whose supply sits in a "curve" wallet; four buyers get tokens from it
 //      (one below the minimum, one too late); the door and bonus wallets get gas; the door wallet gets a pot;
 //   2. a door scheduled SNAPSHOT_LEAD + 2 min from now; the keeper is run with ONCE=1 every 15 s until the door
-//      is settled (snapshot → commit memo → drand round → payouts);
-//   3. verify-door recomputes it.
+//      is settled (snapshot → commit memo → drand round → winners fixed, nothing paid);
+//   3. every buyer opens the door through the API with a signed message; the winners claim and are paid;
+//   4. verify-door recomputes it and checks the claimed payouts.
 // Needs keys/treasury.json funded on devnet (faucet.solana.com). Writes to scratch/rehearsal/.
 //   node test/rehearse-devnet.mjs
 import { Keypair, LAMPORTS_PER_SOL, SystemProgram, Transaction } from "@solana/web3.js";
 import { createMint, getOrCreateAssociatedTokenAccount, mintTo, transfer } from "@solana/spl-token";
-import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync, readFileSync, existsSync } from "node:fs";
+import nacl from "tweetnacl";
+import bs58 from "bs58";
+import { spawn, spawnSync } from "node:child_process";
+import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { connections, withRpc, loadKeypair, balanceOf } from "../src/solana.mjs";
@@ -21,7 +24,7 @@ const RPC = process.env.RPC_URL ?? "https://api.devnet.solana.com";
 process.env.RPC_URL = RPC;
 const conns = connections();
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
-const out = join(root, "scratch", "rehearsal"); mkdirSync(out, { recursive: true });
+const out = join(root, "scratch", "rehearsal"); rmSync(out, { recursive: true, force: true }); mkdirSync(out, { recursive: true }); // a fresh door every time
 
 const treasury = loadKeypair(join(root, "keys", "treasury.json"));
 const door = loadKeypair(join(root, "keys", "door.json"));
@@ -64,6 +67,7 @@ const env = {
   ...process.env, RPC_URL: RPC, MINT: mint.toBase58(), TREASURY_KEYPAIR: join(root, "keys", "treasury.json"), DOOR_KEYPAIR: join(root, "keys", "door.json"), BONUS_KEYPAIR: join(root, "keys", "bonus.json"),
   XMAS_WALLET: Keypair.generate().publicKey.toBase58(), TEAM_WALLET: Keypair.generate().publicKey.toBase58(), EXCLUDE: curve.publicKey.toBase58(),
   DRAWS_DIR: join(out, "draws"), STATE_FILE: join(out, "keeper-state.json"), BONUS_ENTRANTS_FILE: join(out, "bonus-entrants.json"),
+  RESULTS_DIR: join(out, "results"), CLAIMS_FILE: join(out, "claims.json"), VILLAGE_STATE_FILE: join(out, "village.json"),
   CLAIM: "0", ONCE: "1", FIRST_DOOR: "-1", LAST_DOOR: "-1", DOOR_TIMES: JSON.stringify({ "-1": doorAt }), SNAPSHOT_LEAD_SECONDS: String(lead), ELIGIBLE_AFTER_SECONDS: String(elig), FLOOR_SOL: "0.01", RESERVE_SOL: "0.01",
 };
 writeFileSync(join(out, "bonus-entrants.json"), JSON.stringify({ "-1": [buyers[0].publicKey.toBase58(), buyers[1].publicKey.toBase58()] }));
@@ -82,8 +86,36 @@ for (;;) {
   await new Promise((r) => setTimeout(r, 15_000));
 }
 const doc = JSON.parse(readFileSync(join(out, "draws", "door--1.json"), "utf8"));
-log("settled: winners", doc.result.winners.map((w) => `${w.account} ${w.lamports}`).join(" | "), "bonus", doc.result.bonus.length);
+log("settled: prizes", doc.result.winners.map((w) => `#${w.k} ${w.lamports}${w.account ? " " + w.account : " (unopened)"}`).join(" | "), "bonus", doc.result.bonus.length);
+if (doc.result.winners.some((w) => w.account)) { log("FAIL: the published door names a winner before anyone opened"); process.exit(1); }
 
-// 3. verify
+// 3. everyone opens their door through the API; winners claim
+// a free port: the API prints the one it got
+const apiProc = spawn(process.execPath, [join(here, "..", "src", "api.mjs")], { env: { ...env, PORT: "0" }, stdio: ["ignore", "pipe", "inherit"] });
+const PORT = await new Promise((resolve, reject) => { let buf = ""; apiProc.stdout.on("data", (c) => { buf += c; process.stdout.write(c); const m = /advent api on :(\d+)/.exec(buf); if (m) resolve(Number(m[1])); }); apiProc.on("exit", (c) => reject(new Error(`api exited ${c}`))); });
+const call = async (method, path, body) => { const r = await fetch(`http://127.0.0.1:${PORT}${path}`, { method, headers: { "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined }); return [r.status, await r.json()]; };
+const signedBody = async (kp, action) => { const [, { nonce }] = await call("GET", `/nonce/${kp.publicKey.toBase58()}`); const msg = `ADVENT ${action} ${kp.publicKey.toBase58()} ${nonce}`; return { wallet: kp.publicKey.toBase58(), nonce, signature: bs58.encode(nacl.sign.detached(Buffer.from(msg), kp.secretKey)) }; };
+let claimedDoor = 0, claimedBonus = 0, failed = false;
+for (const b of buyers) {
+  const [oc, o] = await call("POST", "/door/-1/open", await signedBody(b, "open--1"));
+  log(`open(door -1, ${b.publicKey.toBase58().slice(0, 6)}) -> ${oc} ${JSON.stringify(o)}`);
+  if (oc === 200 && o.won) {
+    const [cc, c] = await call("POST", "/door/-1/claim", await signedBody(b, "claim--1"));
+    log(`claim(door -1, ${b.publicKey.toBase58().slice(0, 6)}) -> ${cc} ${JSON.stringify(c)}`);
+    if (cc !== 200) failed = true; else claimedDoor++;
+    const [c2c, c2] = await call("POST", "/door/-1/claim", await signedBody(b, "claim--1"));
+    log(`claim again -> ${c2c} ${JSON.stringify(c2)}`); if (c2c !== 409) failed = true;
+  }
+  const [bc, bo] = await call("POST", "/bonus/-1/open", await signedBody(b, "bonus--1"));
+  if (bc === 200 && bo.won) { const [cc, c] = await call("POST", "/bonus/-1/claim", await signedBody(b, "bonus-claim--1")); log(`claim(bonus -1, ${b.publicKey.toBase58().slice(0, 6)}) -> ${cc} ${JSON.stringify(c)}`); if (cc !== 200) failed = true; else claimedBonus++; }
+}
+const [, pub] = await call("GET", "/winners/-1");
+log(`GET /winners/-1 -> ${pub.winnerCount} prizes, ${pub.claimedCount} claimed, named: ${pub.winners.map((w) => w.account.slice(0, 6)).join(" ")}`);
+apiProc.kill();
+if (failed || claimedDoor !== doc.result.winners.length) { log(`FAIL: ${claimedDoor}/${doc.result.winners.length} door prizes claimed, ${claimedBonus} bonus`); process.exit(1); }
+keeper(); // republish: the keeper picks the claims up for door--1.json so the verifier (and the poster) see them
+await sleep(3000);
+
+// 4. verify
 const v = spawnSync(process.execPath, [join(here, "..", "src", "verify-door.mjs"), "-1"], { env: { ...env, TREASURY: treasury.publicKey.toBase58(), DOOR_WALLET: door.publicKey.toBase58() }, stdio: "inherit" });
 process.exit(v.status);

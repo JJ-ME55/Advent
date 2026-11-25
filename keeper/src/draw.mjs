@@ -1,4 +1,4 @@
-// A door's draw, from snapshot to payout, against an abstract chain so it runs the same in tests, on devnet and on
+// A door's draw, from snapshot to the fixed winners, against an abstract chain so it runs the same in tests, on devnet and on
 // mainnet. The chain adapter supplies: deltas(mint, untilSig), sendMemo(text), sendSol(to, lamports, memo),
 // balance(address), now(). Every step is idempotent through the state object the caller persists.
 import { replay, buildList, canonical, winnerCount, prizes, pickWinners, bonusShares } from "./drum.mjs";
@@ -32,31 +32,25 @@ export async function commit(chain, snap) {
   return { ...r, memo: text };
 }
 
-/** Once the round is out: pick, pay. `bonusEntrants` are the wallets that finished the village game (addresses). */
+/**
+ * Once the round is out: pick the winners and fix their prizes. Nothing is sent: it's an advent calendar, so a winner
+ * finds out by opening their door on the site and claims the prize then (api.mjs, claims.mjs). The money stays in the
+ * door and bonus wallets until claimed. `bonusEntrants` are the wallets that finished the village game.
+ */
 export async function settle(chain, cfg, snap, { bonusEntrants = [], bonusPotLamports = 0n, fetchSignature = drandSignature } = {}) {
   const sig = await fetchSignature(snap.round);
   if (!sig) return { status: "unpublished" };
   const seed = seedOf(sig);
   const winners = pickWinners(snap.rows, seed, snap.door, snap.winners);
   const amounts = prizes(snap.pot, winners.length);
-  const payouts = [];
-  for (let i = 0; i < winners.length; i++) {
-    const w = winners[i];
-    const memo = payoutMemo({ door: snap.door, k: w.k, n: winners.length, hash: snap.hash });
-    const r = await chain.sendSol(w.account, amounts[i], memo);
-    payouts.push({ ...w, lamports: amounts[i], signature: r.signature, slot: r.slot, blockTime: r.blockTime });
-  }
+  const door = winners.map((w, i) => ({ k: w.k, account: w.account, weight: w.weight, totalWeight: w.totalWeight, lamports: amounts[i], memo: payoutMemo({ door: snap.door, k: w.k, n: winners.length, hash: snap.hash }) }));
   let bonus = [];
   if (bonusEntrants.length && bonusPotLamports > 0n) {
     const entrants = [...new Set(bonusEntrants)].sort().map((account) => ({ account, weight: 1n }));
     const n = Math.min(BONUS_WINNERS, entrants.length);
     const bw = pickWinners(entrants, seed, snap.door, n, "bonus");
     const shares = bonusShares(bonusPotLamports, n, seed, snap.door);
-    for (let i = 0; i < bw.length; i++) {
-      const memo = payoutMemo({ door: snap.door, k: bw[i].k, n, hash: snap.hash, kind: "bonus" });
-      const r = await chain.sendSol(bw[i].account, shares[i], memo);
-      bonus.push({ ...bw[i], lamports: shares[i], signature: r.signature, slot: r.slot, blockTime: r.blockTime });
-    }
+    bonus = bw.map((w, i) => ({ k: w.k, account: w.account, lamports: shares[i], memo: payoutMemo({ door: snap.door, k: w.k, n, hash: snap.hash, kind: "bonus" }) }));
   }
-  return { status: "settled", signature: sig, seed, winners: payouts, bonus };
+  return { status: "settled", signature: sig, seed, winners: door, bonus };
 }

@@ -59,7 +59,7 @@ must(bc === 200 && bv.entered && bv.entrants === 1, `banked: entered for door 1 
 const file = JSON.parse(readFileSync(process.env.BONUS_ENTRANTS_FILE, "utf8"));
 must(JSON.stringify(file) === JSON.stringify({ 1: [wallet] }), "the keeper's entrants file has the wallet");
 const [, st] = await call("GET", "/bonus/1");
-must(st.phase === "open" && st.entrants === 1 && st.winners === 0, `GET /bonus/1 → ${JSON.stringify(st)}`);
+must(st.phase === "open" && st.entrants === 1 && st.winnerCount === 0, `GET /bonus/1 → ${JSON.stringify(st)}`);
 const [mc] = await call("GET", "/village/map/1");
 must(mc === 403, "today's map stays secret");
 const [, { nonce: n2 }] = await call("GET", `/nonce/${wallet}`);

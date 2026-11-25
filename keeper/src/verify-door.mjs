@@ -4,8 +4,8 @@
 //   2. a commit memo from the treasury carries that hash and the door's drand round, and landed at least
 //      COMMIT_MARGIN before the round's time;
 //   3. drand's relays agree on the round's signature; the seed is its sha256;
-//   4. the winners and prizes recompute from the list, the seed and the pot, and each winner received a payout
-//      transaction with the door's memo and the right amount.
+//   4. the prizes recompute from the list, the seed and the pot; every winner who has opened matches the recomputed
+//      draw; every claimed prize was paid once, to its winner, with the door's memo and the right amount.
 // Environment: MINT, TREASURY (pubkey), DOOR_WALLET (pubkey), HELIUS_API_KEY, RPC_URL; DRAWS_URL or DRAWS_DIR for
 // door-<d>.json. Exit 0 verified, 1 a mismatch, 3 couldn't check.
 import { readFileSync } from "node:fs";
@@ -69,23 +69,31 @@ else {
 }
 const seed = doc.result.seed;
 
-// 4. winners and payouts
+// 4. winners and prizes recompute; every claimed prize was paid, once, to its winner
+// The published file names a winner only once they've opened their door (no spoilers), but every prize's size and
+// position is public, and anyone can recompute the names from the list and the seed as we do here.
 const winners = pickWinners(rows, seed, d, doc.winners);
 const amounts = prizes(BigInt(doc.pot), winners.length);
-ok(winners.length === doc.result.winners.length && winners.every((w, i) => w.account === doc.result.winners[i].account), `the ${winners.length} winners recompute from the list and the seed`);
-ok(amounts.every((a, i) => a.toString() === String(doc.result.winners[i].lamports)), `the prizes recompute (${amounts.map(String).join(", ")} lamports)`);
-const paid = await withRpc(conns, async (c) => {
+const pub = doc.result.winners;
+ok(winners.length === pub.length && pub.every((w, i) => w.k === i + 1), `${winners.length} prizes recompute from the list and the seed`);
+ok(amounts.every((a, i) => a.toString() === String(pub[i].lamports)), `the prizes recompute (${amounts.map(String).join(", ")} lamports)`);
+const named = pub.filter((w) => w.account);
+ok(named.every((w) => winners[w.k - 1].account === w.account), `${named.length} winner${named.length === 1 ? "" : "s"} who opened their door match the recomputed draw`);
+const claimed = pub.filter((w) => w.claimed);
+if (claimed.length === 0) console.log("INFO  no prize from this door has been claimed yet");
+const paid = claimed.length ? await withRpc(conns, async (c) => {
   const sigs = await c.getSignaturesForAddress(new PublicKey(DOOR_WALLET), { limit: 1000 }, "confirmed");
   return sigs.filter((s) => s.memo && s.memo.includes(`ADVENT door door=${d} winner=`) && s.err == null);
-});
-for (let i = 0; i < winners.length; i++) {
-  const w = doc.result.winners[i];
-  const tx = paid.find((p) => p.signature === w.signature);
-  if (!tx) { ok(false, `winner ${i + 1} ${w.account}: payout ${w.signature.slice(0, 12)}… not found among the door wallet's transactions`); continue; }
-  const detail = await withRpc(conns, (c) => c.getParsedTransaction(w.signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }));
+}) : [];
+for (const w of claimed) {
+  const tx = paid.find((p) => p.signature === w.claimSignature);
+  if (!tx) { ok(false, `winner ${w.k} ${w.account}: claim ${String(w.claimSignature).slice(0, 12)}… not found among the door wallet's transactions`); continue; }
+  const detail = await withRpc(conns, (c) => c.getParsedTransaction(w.claimSignature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }));
   const transfer = detail?.transaction.message.instructions.find((ix) => ix.parsed?.type === "transfer" && ix.parsed.info.destination === w.account);
-  ok(transfer && BigInt(transfer.parsed.info.lamports) === amounts[i], `winner ${i + 1} ${w.account} was paid ${amounts[i]} lamports (tx ${w.signature.slice(0, 12)}…, memo winner=${i + 1}/${winners.length})`);
+  ok(transfer && BigInt(transfer.parsed.info.lamports) === amounts[w.k - 1], `winner ${w.k} ${w.account} claimed ${amounts[w.k - 1]} lamports (tx ${w.claimSignature.slice(0, 12)}…)`);
 }
+const dupes = paid.filter((p) => /winner=(\d+)\//.test(p.memo)).reduce((m, p) => m.set(p.memo, (m.get(p.memo) ?? 0) + 1), new Map());
+ok([...dupes.values()].every((n) => n === 1), `no prize of door ${d} was paid twice (${paid.length} payout${paid.length === 1 ? "" : "s"} from the door wallet)`);
 
 console.log(bad ? "\nVerification FAILED" : unsure ? "\nCouldn't fully check this door (see SKIP lines)." : "\nVerified: this door was drawn fairly from public data.");
 process.exit(bad ? 1 : unsure ? 3 : 0);

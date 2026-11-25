@@ -43,13 +43,24 @@ function doorArt(n, x = 170, y = 200, open = false) {
 }
 
 /** After a door opens: the grand winner, the count, the prize. */
-export function openedSvg({ door, sol, grandSol, winners, grandWallet, eligible, ticker = "$ADVENT" }) {
+export function openedSvg({ door, sol, winners, eligible, ticker = "$ADVENT", site = "advent.lol" }) {
   const inner = `${title(`Door ${door} is open`, 140)}
   ${doorArt(door, 120, 200, true)}
   ${big(`${sol} SOL`, 300, 110)}
-  ${line(`${winners} ${winners === 1 ? "winner" : "winners"} from ${eligible} in the drum`, 360)}
-  ${line(`Grand prize ${grandSol} SOL to ${grandWallet}`, 410, 30, C.gold)}
-  ${line(`${ticker} · every door pays · list and draw are public`, 470, 22)}`;
+  ${line(`${winners} ${winners === 1 ? "winner" : "winners"} among ${eligible} on the Nice List`, 360)}
+  ${line(`Open yours at ${site}`, 410, 30, C.gold)}
+  ${line(`${ticker} · nobody knows who until they open · draw is public`, 470, 22)}`;
+  return frame(inner, { accent: C.gold });
+}
+
+/** Someone opened their door and claimed: the wallet shortened, never more. */
+export function claimSvg({ door, sol, wallet, kind = "door", ticker = "$ADVENT" }) {
+  const inner = `${title(kind === "bonus" ? `Bonus Box ${door} claimed` : `Door ${door} claimed`, 140)}
+  ${doorArt(door, 120, 200, true)}
+  ${big(`${sol} SOL`, 300, 110)}
+  ${line(`to ${wallet}`, 360, 30, C.gold)}
+  ${line(kind === "bonus" ? "found all 20 coins in the village and won the draw" : "opened their door and found a prize", 410)}
+  ${line(`${ticker} · paid on claim · every payout is a public transaction`, 470, 22)}`;
   return frame(inner, { accent: C.gold });
 }
 
@@ -58,7 +69,7 @@ export function countdownSvg({ door, sol, eligible, opensIn, ticker = "$ADVENT" 
   const inner = `${title(`Door ${door} opens in ${opensIn}`, 140)}
   ${doorArt(door, 120, 200, false)}
   ${big(`${sol} SOL`, 300, 110)}
-  ${line(`${eligible} wallets in the drum right now`, 360)}
+  ${line(`${eligible} wallets on Santa's Nice List right now`, 360)}
   ${line(`Hold ${ticker} 30 min before the snapshot. More time, more tickets.`, 420, 22)}`;
   return frame(inner, { accent: C.red });
 }

@@ -4,8 +4,8 @@ The ADVENT backend: one Node process per job, all reading and writing the same `
 
 | Process | What | Run |
 |---|---|---|
-| `src/keeper.mjs` | claims pump.fun creator fees, splits them, snapshots and commits each door, settles it, publishes `draws/snapshot.json` and `draws/door-<d>.json` | `node src/keeper.mjs` (`ONCE=1` for a single tick) |
-| `src/api.mjs` | the site's HTTP API over the published files; wallet-signed door opening; the village game (sessions, pickups, banking → `state/bonus-entrants.json` for the keeper) | `PORT=8787 node src/api.mjs` |
+| `src/keeper.mjs` | claims pump.fun creator fees, splits them, snapshots and commits each door, settles it (fixes the winners, pays nothing), publishes `draws/snapshot.json` and `draws/door-<d>.json` naming only winners who have opened | `node src/keeper.mjs` (`ONCE=1` for a single tick) |
+| `src/api.mjs` | the site's HTTP API over the published files; wallet-signed door opening and prize claims (pays from the door/bonus keys, once); the village game (sessions, pickups, banking → `state/bonus-entrants.json` for the keeper) | `PORT=8787 node src/api.mjs` |
 | `src/poster.mjs` | X posts with cards: door opened, countdown, jackpot; `DRY_RUN=1` writes to `posts/` | `node src/poster.mjs` |
 | `src/verify-door.mjs <d>` | recomputes a door from the chain and drand and checks the payouts | `MINT=… TREASURY=… DOOR_WALLET=… node src/verify-door.mjs 3` |
 
@@ -17,14 +17,17 @@ Settings come from the environment (`../.env.example`); keys from `keys/*.json` 
 - `doors.mjs` — the calendar (door time, snapshot time, round); `DOOR_TIMES` overrides for rehearsals.
 - `solana.mjs` — fallback-RPC connection, memo and payout transactions, memo lookup, balance history (Helius, or
   plain RPC one transaction at a time).
-- `draw.mjs` — snapshot → commit → settle against an abstract chain (tests use a fake).
+- `draw.mjs` — snapshot → commit → settle (winners and amounts fixed, nothing sent) against an abstract chain.
+- `claims.mjs` — opening and claiming: reads the keeper's private results, records opens, pays a claim once
+  (race-safe), and scrubs the published winner lists so nobody is named before they open.
 - `claim.mjs` — pump.fun sweep + collect of creator fees.
 - `village.mjs` — the Bonus Box game's judge: daily coin map from a secret and the layout's hiding spots, one run per
   wallet per door, reveal-by-proximity, distance/speed/pace checks, banking writes the entrants file. `docs/API.md`.
 - `cards/` — SVG card templates and the resvg renderer; `x.mjs` — X API v2 with OAuth 1.0a.
 
 ## Tests
-`node --test test/*.test.mjs` (23, no network). `test/smoke-village.mjs` plays a whole run against the API on localhost.
+`node --test test/*.test.mjs` (31, no network). `test/smoke-village.mjs` plays a whole run against the API on localhost.
 `test/smoke-local.mjs` and `test/rehearse-devnet.mjs` hit devnet with the funded treasury (`faucet.solana.com`):
-the rehearsal creates a throwaway mint, fakes buyers, runs a real door ~5 minutes out and verifies it.
+the rehearsal creates a throwaway mint, fakes buyers, runs a real door ~5 minutes out, has every buyer open it
+through the API and the winners claim, and verifies it.
 `test/render-cards.mjs` writes the three cards to `scratch/cards/`.

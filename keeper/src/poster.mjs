@@ -1,5 +1,7 @@
 // What the bot says. Watches DRAWS_DIR for new results and pot changes and posts cards to X:
-//   - a door opened: the opened card, grand winner and tx link, within a minute of settlement;
+//   - a door opened: how much is waiting for how many winners, "open yours", within a minute of settlement. No names:
+//     nobody knows they've won until they open their door on the site;
+//   - a claim: when a winner opens and claims, a card with the wallet shortened and the tx link;
 //   - a countdown every COUNTDOWN_EVERY (default 4 h): the pot so far and the time to the door;
 //   - the jackpot once a day.
 // DRY_RUN=1 (default) writes the text and PNG to POSTS_DIR instead of posting. State in STATE_FILE so nothing posts
@@ -7,7 +9,7 @@
 //   node src/poster.mjs
 import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from "node:fs";
 import { join } from "node:path";
-import { renderPng, openedSvg, countdownSvg, jackpotSvg, fmtSol, shortAddr, fmtDuration } from "./cards/cards.mjs";
+import { renderPng, openedSvg, claimSvg, countdownSvg, jackpotSvg, fmtSol, shortAddr, fmtDuration } from "./cards/cards.mjs";
 import { uploadImage, postTweet } from "./x.mjs";
 import { doorTime, nextDoor, LAST_DOOR } from "./doors.mjs";
 
@@ -31,8 +33,9 @@ const readJson = (f, d = null) => { try { return JSON.parse(readFileSync(f, "utf
 
 /** The text for each post. Short, one link, no hashtag soup. */
 export const lines = {
-  opened: ({ door, sol, winners, grand, grandSol, eligible }) => `Door ${door} is open.\n\n${sol} SOL to ${winners} ${winners === 1 ? "holder" : "holders"} out of ${eligible} in the drum. Grand prize ${grandSol} SOL to ${shortAddr(grand.account)}.\n\nDrawn with drand, list and maths public: ${SITE}/door/${door}\n${EXPLORER}${grand.signature}`,
-  countdown: ({ door, sol, eligible, opensIn }) => `Door ${door} opens in ${opensIn}.\n\n${sol} SOL in it so far, ${eligible} wallets in the drum. Hold ${TICKER} for 30 minutes before the snapshot and you're in; hold longer, more tickets.\n\n${SITE}`,
+  opened: ({ door, sol, winners, eligible }) => `Door ${door} is open: ${sol} SOL waiting for ${winners} ${winners === 1 ? "winner" : "winners"}. Open yours!\n\n${eligible} wallets were on Santa's Nice List. Nobody knows who won until they open their door. Drawn with drand, list and maths public.\n\n${SITE}/door/${door}`,
+  claim: ({ door, sol, wallet, signature, kind }) => `${kind === "bonus" ? `Bonus Box ${door}` : `Door ${door}`}: ${shortAddr(wallet)} opened ${kind === "bonus" ? "the box" : "their door"} and claimed ${sol} SOL.\n\n${EXPLORER}${signature}`,
+  countdown: ({ door, sol, eligible, opensIn }) => `Door ${door} opens in ${opensIn}.\n\n${sol} SOL in it so far, ${eligible} wallets on Santa's Nice List. Hold ${TICKER} for 30 minutes before the snapshot and you're on it; hold longer, more tickets.\n\n${SITE}`,
   jackpot: ({ sol, daysLeft }) => `The Christmas Day door is holding ${sol} SOL. ${daysLeft} days to go; 10% of every door goes in.\n\n${SITE}/door/25`,
 };
 
@@ -52,15 +55,22 @@ async function publish(key, text, svg) {
 async function tick() {
   const snap = readJson(join(DRAWS_DIR, "snapshot.json"));
   if (!snap) return;
-  // 1. doors that opened since the last tick
+  // 1. doors that opened since the last tick, and claims since then
   for (const [d, info] of Object.entries(snap.doors ?? {})) {
-    if (!info.settled || state.posted[`opened-${d}`]) continue;
+    if (!info.settled) continue;
     const doc = readJson(join(DRAWS_DIR, `door-${d}.json`));
     if (!doc?.result?.winners?.length) continue;
-    const grand = doc.result.winners[0];
-    const sol = fmtSol(doc.pot), grandSol = fmtSol(grand.lamports);
-    const args = { door: Number(d), sol, winners: doc.result.winners.length, grand, grandSol, eligible: doc.rows.length };
-    await publish(`opened-${d}`, lines.opened(args), openedSvg({ door: Number(d), sol, grandSol, winners: args.winners, grandWallet: shortAddr(grand.account), eligible: args.eligible, ticker: TICKER }));
+    if (!state.posted[`opened-${d}`]) {
+      const args = { door: Number(d), sol: fmtSol(doc.pot), winners: doc.result.winners.length, eligible: doc.rows.length };
+      await publish(`opened-${d}`, lines.opened(args), openedSvg({ ...args, ticker: TICKER, site: SITE.replace(/^https?:\/\//, "") }));
+    }
+    for (const kind of ["door", "bonus"]) {
+      for (const w of (kind === "door" ? doc.result.winners : doc.result.bonus) ?? []) {
+        if (!w.claimed || !w.account || state.posted[`claim-${d}-${kind}-${w.k}`]) continue;
+        const a = { door: Number(d), sol: fmtSol(w.lamports), wallet: w.account, signature: w.claimSignature, kind };
+        await publish(`claim-${d}-${kind}-${w.k}`, lines.claim(a), claimSvg({ door: a.door, sol: a.sol, wallet: shortAddr(w.account), kind, ticker: TICKER }));
+      }
+    }
   }
   // 2. the countdown
   const t = now(), next = snap.nextDoor;
