@@ -72,13 +72,16 @@ site says so: "the pot sits in a public wallet, every payout is a public transac
 
 ## 6. Bonus Box (village game)
 
-Fish's loop kept: pick a character, find 20 coins hidden in the North Pole village, bank them, open the box.
+Fish's loop: pick a character, earn 20 coins a day in the North Pole village (10 hidden around the map, 10 from three
+daily jobs paying 3 + 3 + 4: Sleigh Ride, Special Delivery, Runaway Reindeer, Elf Trouble), bank them at the Post
+Office, open the box.
 Two changes for safety and simplicity:
-- **No race.** Everyone who banks 20 coins before door time is entered; **10 winners are drawn** from them with the
+- **No race.** Everyone who banks their 20 before the door's snapshot is entered; **10 winners are drawn** from them with the
   same drand round as the door (`sha256(seed ‖ d ‖ "bonus" ‖ k)`). A "first 10" race is a bot contest; a draw makes
   bots pointless.
 - **Server is the judge** (Fish's anti-cheat kept): coin positions server-side, revealed near the player;
-  pickups checked for distance and speed; one session per wallet; the wallet must be an eligible holder.
+  pickups checked for distance and speed; jobs judged from the run's position history; one session per wallet;
+  the wallet must be on the Nice List.
 - Bonus pot split into 10 random amounts (seeded from the same drand round, so it's verifiable too).
 
 ## 7. The site (Fish)
@@ -104,7 +107,7 @@ API (all reads public; writes wallet-signed with a nonce):
 | `POST /door/:d/open` · `/claim` | WIN + amount or no luck (any settled door); claim pays once |
 | `GET /winners/:d` | prize counts and totals, verify data, and only the winners who have opened |
 | `GET /eligible/:wallet` | on the Nice List?, tickets, odds, hold time |
-| `POST /village/session` · `/move` · `/pickup` · `/bank` | the game, server-judged (`docs/API.md`) |
+| `POST /village/session` · `/move` · `/pickup` · `/job/start` · `/job/finish` · `/bank` | the game, server-judged (`docs/API.md`) |
 | `GET /bonus/:d` · `POST /bonus/:d/open` · `/claim` | entrants, claimed count, reveal, claim |
 
 Data: Helius (free tier) for the mint's transfer history; a local SQLite ledger; drand via the Tombola lib.

@@ -25,7 +25,8 @@
    ```
 4. **Fill `.env` on the box:** `ssh … "nano /opt/advent/.env"`. Before launch the keeper and poster idle (no `MINT`);
    the API is already live and answers empty data, which is enough for the site to switch off demo mode.
-   Fill `RPC_URL` (Helius key), `XMAS_WALLET`, `TEAM_WALLET`, `SITE_ORIGIN`, a long random `VILLAGE_SECRET`
+   Fill `RPC_URL` (Helius key), `XMAS_WALLET`, `TEAM_WALLET`, `SITE_ORIGIN` (the example already lists the site and the
+   village game), a long random `VILLAGE_SECRET`
    (`openssl rand -hex 32`). On launch day: `MINT`, `EXCLUDE`, then `systemctl restart advent-keeper advent-poster`.
 5. **Check:** `curl https://api.advent.lol/pot` and `journalctl -u advent-api -f`.
 

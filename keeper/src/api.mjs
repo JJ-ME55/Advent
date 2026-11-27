@@ -13,7 +13,7 @@ import nacl from "tweetnacl";
 import bs58 from "bs58";
 import { replay, buildList, weightFor, MIN_BALANCE, ELIGIBLE_AFTER } from "./drum.mjs";
 import { doorTime, snapshotTime, nextDoor, LAST_DOOR } from "./doors.mjs";
-import { createVillage, FIRST_VILLAGE_DOOR } from "./village.mjs";
+import { createVillage, FIRST_VILLAGE_DOOR, COINS as VILLAGE_COINS, JOB_COINS } from "./village.mjs";
 import { createClaims } from "./claims.mjs";
 import { connections, loadKeypair, sendSol } from "./solana.mjs";
 
@@ -22,7 +22,9 @@ const DRAWS_DIR = process.env.DRAWS_DIR ?? "draws";
 const ENTRANTS_FILE = process.env.BONUS_ENTRANTS_FILE ?? "state/bonus-entrants.json";
 const RESULTS_DIR = process.env.RESULTS_DIR ?? "state/results";
 const CLAIMS_FILE = process.env.CLAIMS_FILE ?? "state/claims.json";
-const ORIGIN = process.env.SITE_ORIGIN ?? "*";
+// CORS: SITE_ORIGIN is a comma-separated allowlist (the site and the village game); the matching Origin is echoed back
+const ORIGINS = (process.env.SITE_ORIGIN ?? "*").split(",").map((o) => o.trim().replace(/\/$/, "")).filter(Boolean);
+const corsOrigin = (req) => { if (ORIGINS.includes("*")) return "*"; const o = req.headers.origin; return o && ORIGINS.includes(o) ? o : ORIGINS[0]; };
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 const now = () => Math.floor(Date.now() / 1000);
 
@@ -113,7 +115,9 @@ const routes = {
   "POST /village/move": (_, body) => village.move(body?.token, body?.pos),
   "POST /village/pickup": (_, body) => village.pickup(body?.token, body?.coin, body?.pos),
   "POST /village/bank": (_, body) => village.bank(body?.token, body?.pos),
-  "GET /village/layout": () => ({ spawn: village.layout.spawn, bank: village.layout.bank, coins: Number(process.env.VILLAGE_COINS ?? 20), firstDoor: village.firstDoor }),
+  "POST /village/job/start": (_, body) => village.jobStart(body?.token, body?.job, body?.pos),
+  "POST /village/job/finish": (_, body) => village.jobFinish(body?.token, body?.job, body?.pos),
+  "GET /village/layout": () => { const { spawn, bank, givers, taxiPoints, deliveryDoors, ringRoad } = village.layout; return { spawn, bank, coins: VILLAGE_COINS, jobCoins: JOB_COINS, firstDoor: village.firstDoor, givers, taxiPoints, deliveryDoors, ringRoad }; },
   "GET /village/map/:d": ({ d }) => village.map(Number(d)),
   "GET /bonus/:d": ({ d }) => { const n = Number(d), res = claims.result(n), st = village.status(n); return { ...st, ...(res ? claims.publicView("bonus", n, res) : { winnerCount: 0, claimedCount: 0, winners: [] }) }; },
 };
@@ -131,7 +135,7 @@ function match(method, path) {
 
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
-  res.setHeader("access-control-allow-origin", ORIGIN); res.setHeader("access-control-allow-headers", "content-type"); res.setHeader("content-type", "application/json");
+  res.setHeader("access-control-allow-origin", corsOrigin(req)); res.setHeader("access-control-allow-methods", "GET, POST, OPTIONS"); res.setHeader("access-control-allow-headers", "content-type"); res.setHeader("vary", "origin"); res.setHeader("content-type", "application/json");
   if (req.method === "OPTIONS") { res.writeHead(204); return res.end(); }
   const r = match(req.method, url.pathname);
   if (!r) { res.writeHead(404); return res.end(JSON.stringify({ error: "not found" })); }

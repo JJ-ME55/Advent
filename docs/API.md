@@ -1,6 +1,7 @@
 # ADVENT API (for the site)
 
-Base URL: the keeper box, e.g. `https://api.advent.lol` (CORS open to the site origin). JSON everywhere; lamports
+Base URL: the keeper box, `https://api.advent.lol` (CORS open to advent.lol, advent-calendar-site.vercel.app and
+north-pole-village.vercel.app). JSON everywhere; lamports
 are decimal strings; times are unix seconds. Everything the API serves is also published as files the keeper
 writes (`snapshot.json`, `door-<d>.json`), so the site can be fully static against a CDN copy if we want.
 
@@ -18,8 +19,8 @@ every user-facing text.
 | `GET /winners/:d` | `{ door, hash, round, seed, signature, commit, pot, eligible, winnerCount, totalLamports, openedCount, claimedCount, claimedLamports, unclaimedLamports, winners: [{ k, account, lamports, opened, claimed, claimSignature }], bonus: { winnerCount, …, winners: [...] } }` — **no spoilers:** `winners` holds only the winners who have opened or claimed (k = 1 is the grand). Counts and totals cover everyone. `seed`, `signature` (drand) and `commit` are what Verify needs; 404 until settled. |
 | `GET /eligible/:wallet` | `{ wallet, holder, inDrum, balance, holdStart, heldSeconds, tickets, totalTickets, odds, reason }` — `inDrum` = on Santa's Nice List (the field name stays); odds is a fraction (0.0137 = 1.37%); `reason` says why not. Computed live from the published balance history at "now". |
 | `GET /bonus/:d` | `{ door, phase, entrants, playing, closesAt, drawAt, winnerCount, totalLamports, openedCount, claimedCount, claimedLamports, winners: [opened or claimed only] }` — `phase` is `open` (runs count), `closed` (snapshot taken, drawing at `drawAt`), `drawn`. |
-| `GET /village/layout` | `{ spawn, bank, coins, firstDoor }` — where the player starts and where to bank (from the layout file Fish exports). |
-| `GET /village/map/:d` | the day's 20 coin positions, **403 until that door's entries close** (then anyone can see where they were). |
+| `GET /village/layout` | `{ spawn, bank, coins: 10, jobCoins: 10, firstDoor, givers: { taxi, delivery, chase, brawl }, taxiPoints, deliveryDoors, ringRoad }` — the layout file Fish exports, as the server read it. |
+| `GET /village/map/:d` | `{ door, coins: [...], jobs: [...] }` — the day's 10 hidden-coin positions, **403 until that door's entries close** (then anyone can see where they were); the 403 body already carries the day's `jobs`, which were never secret. |
 
 ## Wallet-signed writes
 
@@ -42,41 +43,76 @@ show the tx instead of the button. Unclaimed prizes stay where they are; no dead
 
 ## The village (Bonus Box)
 
-The server is the judge: it holds the day's 20 coin positions (chosen from the village's hiding spots with a daily
-secret), tells the client only the coins within 25 m of the player, and checks every pickup. The client never needs
-to know where coins are; it walks, asks, and is told. All distances are metres in the scene's own coordinates
-(`{x, y, z}`, y up; y is optional), so Fish's layout file and the game share one frame.
+A player needs **20 coins a day: 10 hidden coins** found around the map and **10 job coins** from the day's **3 jobs**
+(paying 3 + 3 + 4). Banking all 20 at the **Post Office** (the layout's `bank`) enters the wallet for that door's Bonus
+Box. The keeper draws 10 winners from everyone who banked, with the door's drand round, when the door opens; they
+find out by opening the box on the site and claim. One run per wallet per door; door d's village runs from door d−1
+opening until door d's snapshot.
+
+The server is the judge. It holds the day's coin positions (10 of the layout's hiding spots, chosen with a daily
+secret), tells the client only the coins within 25 m of the player, checks every pickup, and judges every job from
+the run's position history (every `move`, `pickup`, `bank` and `job/*` call adds the position it was sent with). All
+distances are metres in the scene's own coordinates (`{x, y, z}`, y up; y is optional; job points are ground points
+`{x, z}`), so Fish's layout file and the game share one frame.
+
+Every run call takes the session `token`. Every answer (and every 4xx body that has it) carries the run's **view**:
+`{ door, found, total: 10, jobCoins, jobTotal: 10, jobs, banked, nearby, closesAt, drawAt }` (`collected` is kept as an
+alias of `found`), so the client can resync from any reply.
 
 1. **Start a run.** `GET /nonce/:wallet`, sign `ADVENT village <wallet> <nonce>`, `POST /village/session`
-   `{ wallet, nonce, signature }` → `{ token, door, spawn, bank, collected, total, nearby, closesAt, drawAt, resumed }`.
-   One run per wallet per door; calling again resumes it (`resumed: true`, same token, progress kept). 403 if the
-   wallet isn't on the Nice List (body carries the `/eligible` answer and `reason`); 503 if the day's village hasn't
-   opened yet (`opensAt`): door d's village runs from door d−1 opening until door d's snapshot. Between a door's
-   snapshot and its opening (10 min) nobody plays.
-2. **Walk.** `POST /village/move` `{ token, pos }` every second or so (and after any big move) →
-   `{ collected, total, banked, nearby: [{ id, x, y, z }], closesAt, drawAt }`. Render `nearby`; coins that drop
-   out of the list were taken or are out of range.
-3. **Pick up.** `POST /village/pickup` `{ token, coin, pos }` → `{ picked, collected, total, nearby, … }`.
-   422 when more than 3 m from the coin or when the move since the last call is faster than 12 m/s (a teleport),
-   429 when two pickups are under 0.7 s apart, 404 for an id that isn't today's, 409 if already taken.
-   Every error body carries the current view so the client can resync.
-4. **Bank.** `POST /village/bank` `{ token, pos }` within 6 m of `bank` with all 20 →
-   `{ entered: true, entrants, … }`. 409 while coins are missing, 422 if the whole run took under 90 s.
-   Banking enters the wallet for that door's Bonus Box: no race, no "10/10 claimed". The keeper draws 10 winners
-   from all entrants with the door's drand round when the door opens; they find out by opening the box and claim.
-5. **Open the box, then claim.** After the door: `POST /bonus/:d/open`, and if `won`, `POST /bonus/:d/claim`
+   `{ wallet, nonce, signature }` → `{ token, spawn, bank, resumed, startedAt, …view }`. Calling again resumes it
+   (`resumed: true`, same token, progress kept). 403 if the wallet isn't on the Nice List (body carries the `/eligible`
+   answer and `reason`); 503 if the day's village hasn't opened yet (`opensAt`); 410 after the season.
+2. **Walk.** `POST /village/move` `{ token, pos }` every second or so (and after any big move) → the view. Render
+   `nearby: [{ id, x, y, z }]`; coins that drop out were taken or are out of range. 422 `too fast` when the move
+   since the last call is over **22 m/s** (sleds do 16, a police chase more); the player stays where the last good
+   move left them.
+3. **Pick up.** `POST /village/pickup` `{ token, coin, pos }` → `{ picked, …view }`. 422 when more than 3 m from the
+   coin or on a teleport, 429 when two pickups are under 0.7 s apart, 404 for an id that isn't today's, 409 if taken.
+4. **Jobs.** The day's three are in `jobs` on every view:
+   `{ id: "<d>-<type>", type, name, reward, giver: {x, z}, timerSeconds, targets: [...], done, started }`.
+   They are picked from the **door number alone** (no secret: everyone gets the same three, and the client may show
+   them in advance), rewards 3, 3, 4 in list order. Each counts once a day; job coins cap at 10.
+   - `POST /village/job/start` `{ token, job, pos }` within 6 m of `giver` → `{ ok: true, job, startedAt, timerSeconds, …view }`.
+     422 `{ ok: false, reason: "not-at-giver" | "too-fast" }`, 404 `no-such-job`, 409 `already-done`.
+   - `POST /village/job/finish` `{ token, job, pos }` → `{ ok: true, job, reward, jobCoins, jobsDone: [ids], …view }`,
+     or **422 `{ ok: false, reason, job, jobCoins, jobsDone }`**. A failed job is cleared: start it again from the giver
+     and retry. `pos` is the player's final position and is checked like a move.
+
+   | type | name | the server checks, from the positions since `start` | `reason` on failure |
+   |---|---|---|---|
+   | `taxi` | Sleigh Ride | a position within 6 m of `targets[0]` (A), then one within 6 m of `targets[1]` (B); B reached within `timerSeconds` = round(dist(A,B)/9 + 35) of the start; A→B took at least dist/22 s | `no-pickup`, `no-dropoff`, `timeout`, `too-fast` |
+   | `delivery` | Special Delivery | within 6 m of the Post Office (`bank`) first, then within 6 m of each of the 3 doors in `targets`, any order, the last one within 170 s of the sack | `no-sack`, `doors-missed`, `timeout` |
+   | `chase` | Runaway Reindeer | finished 20–240 s after the start, with the final position on the ring road (`targets[0]` = `ringRoad`: `{ r, width, x, z }`, within width/2 + 6 m of radius r) | `too-quick`, `timeout`, `not-on-ring` |
+   | `brawl` | Elf Trouble (`timerSeconds: null`) | finished 25 s or more after the start, every position since within 40 m of the giver | `too-quick`, `left-area` |
+
+   The chase's reindeer isn't simulated server-side (the loose check above, as agreed); the brawl's combat is
+   client-side. Both are worth 3 or 4 coins and the player still needs the 10 hidden ones.
+5. **Bank.** `POST /village/bank` `{ token, pos }` within 6 m of `bank` with `found` = 10 **and** `jobCoins` = 10 →
+   `{ entered: true, entrants, …view }`. Otherwise **409 `{ reason: "not-enough", found, jobCoins, … }`**; 422
+   `not at the Post Office`; 422 `{ reason: "too-quick" }` if the whole run took under 300 s. Banking enters the wallet:
+   no race, no "10/10 claimed".
+6. **Open the box, then claim.** After the door: `POST /bonus/:d/open`, and if `won`, `POST /bonus/:d/claim`
    (table above).
-6. **Any token** gets 401 `no such session`; 409 `entries for door d closed` once the snapshot has passed (body
-   has `next`, the door whose run is open now).
+7. **Any token** gets 401 `no such session`; 409 `entries for door d closed` once the snapshot has passed (body
+   has `next`, the door whose run is open now). Position history lives in memory: after a server restart a job in
+   progress has to be started again (the hidden coins and finished jobs are kept).
 
-**The layout file** (`VILLAGE_LAYOUT_FILE`): `{ "spawn": {x,y,z}, "bank": {x,y,z}, "spots": [{ "id", x, y, z }, …] }`
-with at least 20 spots, ideally 60–100, exported from the scene (behind houses, in stalls, up the hill). The daily
-20 are drawn from these, so the more spots, the less yesterday's map helps. Without a file the server uses a 200 m
-square with 64 spots for development.
+**The layout file** (`VILLAGE_LAYOUT_FILE`), exported from the game:
+```
+{ "spawn": {x,y,z}, "bank": {x,y,z},
+  "spots": [{ "id", x, y, z }, …],                     ~140 hiding spots (10 are drawn a day; the more, the less yesterday's map helps)
+  "givers": { "taxi": {x,z}, "delivery": {x,z}, "chase": {x,z}, "brawl": {x,z} },
+  "taxiPoints": [{ "name", x, z }, …],                 2 or more; A and B are picked from these per day
+  "deliveryDoors": [{ x, z }, …],                      3 or more; 3 are picked per day
+  "ringRoad": { "r", "width", "x"?, "z"? } }           centre defaults to 0,0
+```
+A, B and the 3 doors are picked by the same ranking trick as the coins, seeded with the door number. Without a file
+the server uses a 200 m development square (64 spots, six taxi points, twelve doors, ring r = 80); missing job
+fields in a file get those defaults with a warning in the log.
 
-Thresholds (env): `VILLAGE_REVEAL_RADIUS` 25, `VILLAGE_PICKUP_RADIUS` 3, `VILLAGE_BANK_RADIUS` 6, `VILLAGE_MAX_SPEED` 12,
-`VILLAGE_PICKUP_GAP_MS` 700, `VILLAGE_MIN_RUN_SECONDS` 90, `VILLAGE_COINS` 20, `VILLAGE_FIRST_DOOR`. Tune them to the
-character's real speed before launch (a sprint of 8 m/s leaves headroom for lag).
+Thresholds (env): `VILLAGE_REVEAL_RADIUS` 25, `VILLAGE_PICKUP_RADIUS` 3, `VILLAGE_BANK_RADIUS` 6, `VILLAGE_JOB_RADIUS` 6,
+`VILLAGE_MAX_SPEED` 22, `VILLAGE_PICKUP_GAP_MS` 700, `VILLAGE_MIN_RUN_SECONDS` 300, `VILLAGE_COINS` 10, `VILLAGE_FIRST_DOOR`.
 
 ## Published files (same data, no API)
 
