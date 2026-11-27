@@ -9,6 +9,7 @@
 //   node src/poster.mjs
 import { readFileSync, writeFileSync, mkdirSync, existsSync, renameSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { renderPng, openedSvg, claimSvg, countdownSvg, jackpotSvg, fmtSol, shortAddr, fmtDuration } from "./cards/cards.mjs";
 import { uploadImage, postTweet } from "./x.mjs";
 import { doorTime, nextDoor, LAST_DOOR } from "./doors.mjs";
@@ -87,7 +88,7 @@ async function tick() {
   }
 }
 
-if (process.argv[1] && import.meta.url === new URL(`file:///${process.argv[1].replace(/\\/g, "/")}`).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   log(`poster ${DRY ? "DRY-RUN" : "LIVE"} on ${DRAWS_DIR}`);
   if (process.env.ONCE === "1") { await tick(); process.exit(0); }
   for (;;) { try { await tick(); } catch (e) { log(`poster: ${e.message}`); } await new Promise((r) => setTimeout(r, TICK * 1000)); }

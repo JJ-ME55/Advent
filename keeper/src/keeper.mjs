@@ -28,6 +28,11 @@ const TICK = num("TICK_SECONDS", 20);
 const CLAIM_MIN = BigInt(Math.round(num("CLAIM_MIN_SOL", 0.05) * LAMPORTS_PER_SOL));
 const RESERVE = BigInt(Math.round(num("RESERVE_SOL", 0.02) * LAMPORTS_PER_SOL)); // gas kept in every hot wallet
 const SPLIT = { door: 7000n, xmas: 1000n, bonus: 1000n, team: 1000n };
+if (!process.env.MINT) { // before launch: nothing to do until the coin exists; stay up quietly so systemd is happy
+  log("keeper idle: MINT is not set. Fill MINT (and EXCLUDE, XMAS_WALLET, TEAM_WALLET) in .env and restart");
+  setInterval(() => log("keeper idle: MINT is not set"), 6 * 3600 * 1000);
+  await new Promise(() => {});
+}
 const MINT = env("MINT");
 const DRAWS_DIR = process.env.DRAWS_DIR ?? "./draws";
 const STATE_FILE = process.env.STATE_FILE ?? "./state/keeper-state.json";
