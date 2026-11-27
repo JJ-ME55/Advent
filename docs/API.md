@@ -108,7 +108,7 @@ alias of `found`), so the client can resync from any reply.
   "taxiPoints": [{ "name", x, z }, …],                 2 or more; A and B are picked from these per day
   "deliveryDoors": [{ x, z }, …],                      3 or more; 3 are picked per day
   "ringRoad": { "r", "width", "x"?, "z"? },           centre defaults to 0,0
-  "respawns": [{ x, y?, z }, …] }                      where a busted/KO'd player reappears; defaults to [spawn]
+  "respawns": { "busted": {x,z}, "knockedOut": {x,z} } }   where a busted/KO'd player reappears (a list works too); defaults to [spawn]
 ```
 A, B and the 3 doors are picked by the same ranking trick as the coins, seeded with the door number. Without a file
 the server uses a 200 m development square (64 spots, six taxi points, twelve doors, ring r = 80); missing job

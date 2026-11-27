@@ -60,7 +60,9 @@ export function loadLayout(file) {
   if (Array.isArray(l.taxiPoints) && l.taxiPoints.length >= 2) out.taxiPoints = l.taxiPoints.map((p, i) => ({ name: String(p.name ?? `P${i + 1}`), ...xz(p) })); else { out.taxiPoints = def.taxiPoints; missing.push("taxiPoints (2+)"); }
   if (Array.isArray(l.deliveryDoors) && l.deliveryDoors.length >= 3) out.deliveryDoors = l.deliveryDoors.map(xz); else { out.deliveryDoors = def.deliveryDoors; missing.push("deliveryDoors (3+)"); }
   if (l.ringRoad && Number.isFinite(l.ringRoad.r)) out.ringRoad = { r: Number(l.ringRoad.r), width: Number(l.ringRoad.width ?? 8), ...xz(l.ringRoad) }; else { out.ringRoad = def.ringRoad; missing.push("ringRoad"); }
-  out.respawns = Array.isArray(l.respawns) && l.respawns.length ? l.respawns.map((p) => pos(p) ?? { ...xz(p), y: 0 }) : [out.spawn];
+  // respawns: a list, or an object keyed by reason ({ busted, knockedOut }); each point may carry y
+  const rs = Array.isArray(l.respawns) ? l.respawns : l.respawns && typeof l.respawns === "object" ? Object.entries(l.respawns).map(([name, p]) => ({ name, ...p })) : [];
+  out.respawns = rs.length ? rs.map((p) => ({ ...(pos(p) ?? { ...xz(p), y: 0 }), ...(p.name ? { name: String(p.name) } : {}) })) : [out.spawn];
   if (missing.length) console.warn(`village layout ${file}: using development defaults for ${missing.join(", ")}`);
   return out;
 }
