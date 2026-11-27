@@ -12,5 +12,5 @@ SSH="ssh -i $KEY $HOST"
 echo "== shipping $(git -C "$REPO" rev-parse --short HEAD) to $HOST:/opt/advent"
 $SSH "mkdir -p /opt/advent"
 git -C "$REPO" archive --format=tar HEAD | $SSH "tar -x -C /opt/advent"
-$SSH "sed -i 's/
-$//' /opt/advent/deploy/*.sh /opt/advent/deploy/*.service && bash /opt/advent/deploy/hetzner.sh"
+# Windows checkouts can ship CR LF; bash on the box can't read those, so strip them before running anything
+$SSH "sed -i 's/\r\$//' /opt/advent/deploy/*.sh /opt/advent/deploy/*.service && bash /opt/advent/deploy/hetzner.sh"
