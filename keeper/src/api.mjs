@@ -117,7 +117,7 @@ const routes = {
   "POST /village/bank": (_, body) => village.bank(body?.token, body?.pos),
   "POST /village/job/start": (_, body) => village.jobStart(body?.token, body?.job, body?.pos),
   "POST /village/job/finish": (_, body) => village.jobFinish(body?.token, body?.job, body?.pos),
-  "GET /village/layout": () => { const { spawn, bank, givers, taxiPoints, deliveryDoors, ringRoad } = village.layout; return { spawn, bank, coins: VILLAGE_COINS, jobCoins: JOB_COINS, firstDoor: village.firstDoor, givers, taxiPoints, deliveryDoors, ringRoad }; },
+  "GET /village/layout": () => { const { spawn, bank, givers, taxiPoints, deliveryDoors, ringRoad, respawns } = village.layout; return { spawn, bank, coins: VILLAGE_COINS, jobCoins: JOB_COINS, firstDoor: village.firstDoor, givers, taxiPoints, deliveryDoors, ringRoad, respawns }; },
   "GET /village/map/:d": ({ d }) => village.map(Number(d)),
   "GET /bonus/:d": ({ d }) => { const n = Number(d), res = claims.result(n), st = village.status(n); return { ...st, ...(res ? claims.publicView("bonus", n, res) : { winnerCount: 0, claimedCount: 0, winners: [] }) }; },
 };

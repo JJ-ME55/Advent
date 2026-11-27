@@ -30,7 +30,8 @@ export const REVEAL_RADIUS = Number(process.env.VILLAGE_REVEAL_RADIUS ?? 25); //
 export const PICKUP_RADIUS = Number(process.env.VILLAGE_PICKUP_RADIUS ?? 3); // metres from the coin to take it
 export const BANK_RADIUS = Number(process.env.VILLAGE_BANK_RADIUS ?? 6);
 export const JOB_RADIUS = Number(process.env.VILLAGE_JOB_RADIUS ?? 6); // metres: at the giver, a taxi point, a delivery door
-export const MAX_SPEED = Number(process.env.VILLAGE_MAX_SPEED ?? 22); // m/s; sleds do 16, police chases more
+export const MAX_SPEED = Number(process.env.VILLAGE_MAX_SPEED ?? 22); // m/s; sleds 16, Santa's sleigh 18, on foot 7.4; no boosts
+export const RESPAWN_RADIUS = Number(process.env.VILLAGE_RESPAWN_RADIUS ?? 8); // m; a busted/KO'd player reappears at one of the layout's respawn points, any speed
 export const PICKUP_GAP_MS = Number(process.env.VILLAGE_PICKUP_GAP_MS ?? 700); // two coins can't be taken in the same breath
 export const MIN_RUN_SECONDS = Number(process.env.VILLAGE_MIN_RUN_SECONDS ?? 300); // nobody does 10 coins and 3 jobs in under this
 export const DELIVERY_SECONDS = 170, CHASE_SECONDS = 240, CHASE_MIN_SECONDS = 20, BRAWL_MIN_SECONDS = 25, BRAWL_RANGE = 40;
@@ -46,7 +47,8 @@ const xz = (p) => ({ x: Number(p?.x ?? 0), z: Number(p?.z ?? 0) });
 const rank = (items, key, ...seed) => items.map((it, i) => ({ it, r: sha(...seed, key(it, i)).toString("hex") })).sort((a, b) => (a.r < b.r ? -1 : 1)).map((x) => x.it);
 
 /** The layout Fish exports: { spawn, bank, spots: [{ id, x, y, z }], givers: { taxi, delivery, chase, brawl }, taxiPoints: [{ name, x, z }],
- *  deliveryDoors: [{ x, z }], ringRoad: { r, width, x?, z? } }. Without a file: a 200 m development square. Missing job points get defaults. */
+ *  deliveryDoors: [{ x, z }], ringRoad: { r, width, x?, z? }, respawns: [{ x, y?, z }] }. Without a file: a 200 m development square.
+ *  Missing job points get defaults; missing respawns means the spawn is the only one. */
 export function loadLayout(file) {
   const def = defaultLayout();
   if (!(file && existsSync(file))) return def;
@@ -58,6 +60,7 @@ export function loadLayout(file) {
   if (Array.isArray(l.taxiPoints) && l.taxiPoints.length >= 2) out.taxiPoints = l.taxiPoints.map((p, i) => ({ name: String(p.name ?? `P${i + 1}`), ...xz(p) })); else { out.taxiPoints = def.taxiPoints; missing.push("taxiPoints (2+)"); }
   if (Array.isArray(l.deliveryDoors) && l.deliveryDoors.length >= 3) out.deliveryDoors = l.deliveryDoors.map(xz); else { out.deliveryDoors = def.deliveryDoors; missing.push("deliveryDoors (3+)"); }
   if (l.ringRoad && Number.isFinite(l.ringRoad.r)) out.ringRoad = { r: Number(l.ringRoad.r), width: Number(l.ringRoad.width ?? 8), ...xz(l.ringRoad) }; else { out.ringRoad = def.ringRoad; missing.push("ringRoad"); }
+  out.respawns = Array.isArray(l.respawns) && l.respawns.length ? l.respawns.map((p) => pos(p) ?? { ...xz(p), y: 0 }) : [out.spawn];
   if (missing.length) console.warn(`village layout ${file}: using development defaults for ${missing.join(", ")}`);
   return out;
 }
@@ -74,6 +77,7 @@ function defaultLayout() {
     spawn: { x: 0, y: 0, z: 0 }, bank: { x: 0, y: 0, z: 0 }, spots,
     givers: { taxi: { x: -60, z: -60 }, delivery: { x: 10, z: 0 }, chase: { x: 60, z: -60 }, brawl: { x: 80, z: 0 } }, // brawl's giver sits on the ring road
     taxiPoints, deliveryDoors, ringRoad: { r: 80, width: 8, x: 0, z: 0 },
+    respawns: [{ x: 0, y: 0, z: 0 }, { x: -90, y: 0, z: 90 }], // the spawn and a hospital in the far corner
   };
 }
 
@@ -156,13 +160,17 @@ export function createVillage({ stateFile, entrantsFile, layoutFile, layout: giv
   const jobsDone = (d, s) => jobsFor(d).filter((j) => s.jobs[j.id]?.done).map((j) => j.id);
   const view = (d, s, p) => ({ door: d, found: s.collected.length, collected: s.collected.length, total: COINS, jobCoins: s.jobCoins, jobTotal: JOB_COINS, jobs: jobsView(d, s), banked: s.banked, nearby: nearby(d, s, p), closesAt: snapshotTime(d), drawAt: doorTime(d) });
   const lookup = (token) => { const h = token && byToken.get(token); if (!h) return [401, { error: "no such session" }]; if (now() >= snapshotTime(h.door)) return [409, { error: `entries for door ${h.door} closed`, door: h.door, next: villageDoor(now()) }]; return h; };
-  /** Moves the player and records the position; rejects teleports. Returns the error or null. */
+  const respawns = layout.respawns ?? [layout.spawn];
+  const atRespawn = (p) => respawns.some((r) => dxz(r, p) <= RESPAWN_RADIUS);
+  /** Moves the player and records the position; rejects teleports. A jump that lands on a respawn point (busted, KO'd) is
+   *  allowed at any speed and marked in the history, so a job in progress sees it as leaving. Returns the error or null. */
   const move = (s, p, t) => {
     const dt = t - s.last.t, dd = dist(s.last, p);
-    if (dt > 0.05 && dd / dt > MAX_SPEED) return `too fast: ${dd.toFixed(1)} m in ${dt.toFixed(2)} s`;
-    if (dt <= 0.05 && dd > MAX_SPEED) return `too fast: ${dd.toFixed(1)} m at once`;
+    const fast = (dt > 0.05 && dd / dt > MAX_SPEED) || (dt <= 0.05 && dd > MAX_SPEED);
+    const respawn = fast && atRespawn(p);
+    if (fast && !respawn) return dt > 0.05 ? `too fast: ${dd.toFixed(1)} m in ${dt.toFixed(2)} s` : `too fast: ${dd.toFixed(1)} m at once`;
     s.last = { ...p, t };
-    const h = history(s); h.push({ t, x: p.x, z: p.z }); if (h.length > HISTORY) h.splice(0, h.length - HISTORY);
+    const h = history(s); h.push(respawn ? { t, x: p.x, z: p.z, respawn: true } : { t, x: p.x, z: p.z }); if (h.length > HISTORY) h.splice(0, h.length - HISTORY);
     return null;
   };
 

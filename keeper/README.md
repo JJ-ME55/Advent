@@ -27,7 +27,7 @@ Settings come from the environment (`../.env.example`); keys from `keys/*.json` 
 - `cards/` — SVG card templates and the resvg renderer; `x.mjs` — X API v2 with OAuth 1.0a.
 
 ## Tests
-`node --test test/*.test.mjs` (37, no network). `test/smoke-village.mjs` plays a whole village day (coins, jobs, bank)
+`node --test test/*.test.mjs` (38, no network). `test/smoke-village.mjs` plays a whole village day (coins, jobs, bank)
 against the API on localhost in about 30 s.
 `test/smoke-local.mjs` and `test/rehearse-devnet.mjs` hit devnet with the funded treasury (`faucet.solana.com`):
 the rehearsal creates a throwaway mint, fakes buyers, runs a real door ~5 minutes out, has every buyer open it

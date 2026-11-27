@@ -1,7 +1,7 @@
 # ADVENT API (for the site)
 
-Base URL: the keeper box, `https://api.advent.lol` (CORS open to advent.lol, advent-calendar-site.vercel.app and
-north-pole-village.vercel.app). JSON everywhere; lamports
+Base URL: the keeper box, `https://api.adventcoin.lol` (CORS open to adventcoin.lol, www.adventcoin.lol,
+advent-calendar-site.vercel.app and north-pole-village.vercel.app). JSON everywhere; lamports
 are decimal strings; times are unix seconds. Everything the API serves is also published as files the keeper
 writes (`snapshot.json`, `door-<d>.json`), so the site can be fully static against a CDN copy if we want.
 
@@ -19,7 +19,7 @@ every user-facing text.
 | `GET /winners/:d` | `{ door, hash, round, seed, signature, commit, pot, eligible, winnerCount, totalLamports, openedCount, claimedCount, claimedLamports, unclaimedLamports, winners: [{ k, account, lamports, opened, claimed, claimSignature }], bonus: { winnerCount, …, winners: [...] } }` — **no spoilers:** `winners` holds only the winners who have opened or claimed (k = 1 is the grand). Counts and totals cover everyone. `seed`, `signature` (drand) and `commit` are what Verify needs; 404 until settled. |
 | `GET /eligible/:wallet` | `{ wallet, holder, inDrum, balance, holdStart, heldSeconds, tickets, totalTickets, odds, reason }` — `inDrum` = on Santa's Nice List (the field name stays); odds is a fraction (0.0137 = 1.37%); `reason` says why not. Computed live from the published balance history at "now". |
 | `GET /bonus/:d` | `{ door, phase, entrants, playing, closesAt, drawAt, winnerCount, totalLamports, openedCount, claimedCount, claimedLamports, winners: [opened or claimed only] }` — `phase` is `open` (runs count), `closed` (snapshot taken, drawing at `drawAt`), `drawn`. |
-| `GET /village/layout` | `{ spawn, bank, coins: 10, jobCoins: 10, firstDoor, givers: { taxi, delivery, chase, brawl }, taxiPoints, deliveryDoors, ringRoad }` — the layout file Fish exports, as the server read it. |
+| `GET /village/layout` | `{ spawn, bank, coins: 10, jobCoins: 10, firstDoor, givers: { taxi, delivery, chase, brawl }, taxiPoints, deliveryDoors, ringRoad, respawns }` — the layout file Fish exports, as the server read it. |
 | `GET /village/map/:d` | `{ door, coins: [...], jobs: [...] }` — the day's 10 hidden-coin positions, **403 until that door's entries close** (then anyone can see where they were); the 403 body already carries the day's `jobs`, which were never secret. |
 
 ## Wallet-signed writes
@@ -65,8 +65,10 @@ alias of `found`), so the client can resync from any reply.
    answer and `reason`); 503 if the day's village hasn't opened yet (`opensAt`); 410 after the season.
 2. **Walk.** `POST /village/move` `{ token, pos }` every second or so (and after any big move) → the view. Render
    `nearby: [{ id, x, y, z }]`; coins that drop out were taken or are out of range. 422 `too fast` when the move
-   since the last call is over **22 m/s** (sleds do 16, a police chase more); the player stays where the last good
-   move left them.
+   since the last call is over **22 m/s** (sleds do 16, Santa's sleigh 18, on foot 7.4; no boosts); the player stays where
+   the last good move left them. **Exception:** a jump that lands within 8 m of one of the layout's `respawns` (busted,
+   KO'd) is accepted at any speed and without a strike; it is marked in the position history, so a brawl in progress
+   fails with `left-area` and a taxi/delivery keeps its timers running.
 3. **Pick up.** `POST /village/pickup` `{ token, coin, pos }` → `{ picked, …view }`. 422 when more than 3 m from the
    coin or on a teleport, 429 when two pickups are under 0.7 s apart, 404 for an id that isn't today's, 409 if taken.
 4. **Jobs.** The day's three are in `jobs` on every view:
@@ -105,14 +107,15 @@ alias of `found`), so the client can resync from any reply.
   "givers": { "taxi": {x,z}, "delivery": {x,z}, "chase": {x,z}, "brawl": {x,z} },
   "taxiPoints": [{ "name", x, z }, …],                 2 or more; A and B are picked from these per day
   "deliveryDoors": [{ x, z }, …],                      3 or more; 3 are picked per day
-  "ringRoad": { "r", "width", "x"?, "z"? } }           centre defaults to 0,0
+  "ringRoad": { "r", "width", "x"?, "z"? },           centre defaults to 0,0
+  "respawns": [{ x, y?, z }, …] }                      where a busted/KO'd player reappears; defaults to [spawn]
 ```
 A, B and the 3 doors are picked by the same ranking trick as the coins, seeded with the door number. Without a file
 the server uses a 200 m development square (64 spots, six taxi points, twelve doors, ring r = 80); missing job
 fields in a file get those defaults with a warning in the log.
 
 Thresholds (env): `VILLAGE_REVEAL_RADIUS` 25, `VILLAGE_PICKUP_RADIUS` 3, `VILLAGE_BANK_RADIUS` 6, `VILLAGE_JOB_RADIUS` 6,
-`VILLAGE_MAX_SPEED` 22, `VILLAGE_PICKUP_GAP_MS` 700, `VILLAGE_MIN_RUN_SECONDS` 300, `VILLAGE_COINS` 10, `VILLAGE_FIRST_DOOR`.
+`VILLAGE_MAX_SPEED` 22, `VILLAGE_RESPAWN_RADIUS` 8, `VILLAGE_PICKUP_GAP_MS` 700, `VILLAGE_MIN_RUN_SECONDS` 300, `VILLAGE_COINS` 10, `VILLAGE_FIRST_DOOR`.
 
 ## Published files (same data, no API)
 

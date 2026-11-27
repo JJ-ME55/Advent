@@ -125,6 +125,21 @@ test("a move at 21 m/s is accepted, one at 30 m/s is rejected; pickups keep the 
   assert.equal(v.move(token, { x: 210, y: 0, z: 0 }).door, 1, "the player is still where the last good move left them");
 });
 
+test("a jump onto a respawn point is not a speed strike; a jump anywhere else is", () => {
+  const { v, clock } = fresh(T + 10);
+  const { token } = v.session("W");
+  const [hospital] = v.layout.respawns.filter((r) => d2(r, v.layout.spawn) > 50);
+  clock.t += 10; assert.ok(!Array.isArray(v.move(token, { x: 40, y: 0, z: -40 })));
+  // busted: the client puts the player at the hospital, 180 m away, in the same second
+  clock.t += 1; const r = v.move(token, { x: hospital.x + 3, y: 0, z: hospital.z - 2 });
+  assert.ok(!Array.isArray(r), `respawn jump refused: ${JSON.stringify(r)}`);
+  // the same jump to a point that is not a respawn is still a teleport
+  clock.t += 1; const bad = v.move(token, { x: 60, y: 0, z: 60 });
+  assert.equal(bad[0], 422); assert.match(bad[1].error, /too fast/);
+  // and the player is at the hospital, not where the teleport pointed
+  clock.t += 1; assert.ok(!Array.isArray(v.move(token, { x: hospital.x + 4, y: 0, z: hospital.z + 4 })));
+});
+
 test("teleports and machine-gun pickups are refused", () => {
   const { v, clock } = fresh(T + 10);
   const { token } = v.session("W");

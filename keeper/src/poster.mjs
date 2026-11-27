@@ -20,7 +20,7 @@ const STATE_FILE = process.env.POSTER_STATE_FILE ?? "state/poster-state.json";
 const DRY = process.env.DRY_RUN !== "0";
 const TICK = Number(process.env.POSTER_TICK_SECONDS ?? 20);
 const COUNTDOWN_EVERY = Number(process.env.COUNTDOWN_EVERY_SECONDS ?? 4 * 3600);
-const SITE = process.env.SITE_URL ?? "https://advent.lol";
+const SITE = process.env.SITE_URL ?? "https://adventcoin.lol";
 const TICKER = process.env.TICKER ?? "$ADVENT";
 const EXPLORER = process.env.EXPLORER ?? "https://solscan.io/tx/";
 mkdirSync(POSTS_DIR, { recursive: true }); mkdirSync(join(STATE_FILE, ".."), { recursive: true });

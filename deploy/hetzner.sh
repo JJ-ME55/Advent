@@ -4,7 +4,7 @@
 # Idempotent. Never touches keys/ or .env (JJ copies those by hand). Installs Caddy for TLS on API_HOST.
 set -euo pipefail
 APP=/opt/advent
-API_HOST=${API_HOST:-api.advent.lol}
+API_HOST=${API_HOST:-api.adventcoin.lol}
 
 id -u advent >/dev/null 2>&1 || useradd -r -m -d $APP -s /usr/sbin/nologin advent
 mkdir -p $APP/{draws,state,posts,keys}

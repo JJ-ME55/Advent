@@ -43,7 +43,7 @@ function doorArt(n, x = 170, y = 200, open = false) {
 }
 
 /** After a door opens: the grand winner, the count, the prize. */
-export function openedSvg({ door, sol, winners, eligible, ticker = "$ADVENT", site = "advent.lol" }) {
+export function openedSvg({ door, sol, winners, eligible, ticker = "$ADVENT", site = "adventcoin.lol" }) {
   const inner = `${title(`Door ${door} is open`, 140)}
   ${doorArt(door, 120, 200, true)}
   ${big(`${sol} SOL`, 300, 110)}
