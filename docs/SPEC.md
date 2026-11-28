@@ -72,7 +72,7 @@ site says so: "the pot sits in a public wallet, every payout is a public transac
 
 ## 6. Bonus Box (village game)
 
-Fish's loop: pick a character, earn 20 coins a day in the North Pole village (10 hidden around the map, 10 from three
+Fish's loop: pick a character, earn 15 coins a day in the North Pole village (5 hidden around the map, 10 from three
 daily jobs paying 3 + 3 + 4: Sleigh Ride, Special Delivery, Runaway Reindeer, Elf Trouble), bank them at the Post
 Office, open the box.
 Two changes for safety and simplicity:

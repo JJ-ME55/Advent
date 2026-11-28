@@ -34,14 +34,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const [, { nonce }] = await call("GET", `/nonce/${wallet}`);
 const signature = bs58.encode(nacl.sign.detached(Buffer.from(`ADVENT village ${wallet} ${nonce}`), kp.secretKey));
 let [code, s] = await call("POST", "/village/session", { wallet, nonce, signature });
-must(code === 200 && s.token && s.door === 1 && s.total === 10 && s.jobTotal === 10 && s.jobs.length === 3, `session started for door ${s.door}: ${s.found}/${s.total} coins, ${s.jobCoins}/${s.jobTotal} job coins, jobs ${s.jobs.map((j) => j.type).join("+")}`);
+must(code === 200 && s.token && s.door === 1 && s.total === 5 && s.jobTotal === 10 && s.jobs.length === 3, `session started for door ${s.door}: ${s.found}/${s.total} coins, ${s.jobCoins}/${s.jobTotal} job coins, jobs ${s.jobs.map((j) => j.type).join("+")}`);
 const [c2, s2] = await call("POST", "/village/session", { wallet, nonce, signature });
 must(c2 === 401, "a reused nonce is refused");
 // the client only ever sees coins near the player: sweep the village in a lawn-mower pattern to find them all
 const seen = new Map(); let at = s.spawn, picked = 0;
 const stepTo = async (p) => { const d = Math.hypot(p.x - at.x, p.z - at.z); await sleep(Math.max(15, (d / 350) * 1000)); at = p; const [c, v] = await call("POST", "/village/move", { token: s.token, pos: p }); if (c !== 200) throw new Error(`move ${c} ${v.error}`); for (const n of v.nearby) seen.set(n.id, n); return v; };
-for (let z = -110; z <= 110 && picked < 10; z += 20) {
-  for (let x = -110; x <= 110 && picked < 10; x += 20) {
+for (let z = -110; z <= 110 && picked < s.total; z += 20) {
+  for (let x = -110; x <= 110 && picked < s.total; x += 20) {
     await stepTo({ x, y: 0, z });
     for (const [id, c] of seen) {
       await stepTo({ x: c.x, y: 0, z: c.z });
@@ -51,7 +51,7 @@ for (let z = -110; z <= 110 && picked < 10; z += 20) {
     }
   }
 }
-must(picked === 10, `all 10 hidden coins picked up walking the village (never told where they were up front)`);
+must(picked === s.total, `all ${s.total} hidden coins picked up walking the village (never told where they were up front)`);
 // the jobs: honest runs, judged from the move history; the timed ones (chase 20 s, brawl 25 s) run at the same time
 const [, lay] = await call("GET", "/village/layout");
 must(lay.givers && lay.taxiPoints.length >= 2 && lay.deliveryDoors.length >= 3 && lay.ringRoad, "GET /village/layout has the job points");

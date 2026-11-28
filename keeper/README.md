@@ -21,13 +21,13 @@ Settings come from the environment (`../.env.example`); keys from `keys/*.json` 
 - `claims.mjs` — opening and claiming: reads the keeper's private results, records opens, pays a claim once
   (race-safe), and scrubs the published winner lists so nobody is named before they open.
 - `claim.mjs` — pump.fun sweep + collect of creator fees.
-- `village.mjs` — the Bonus Box game's judge: 10 hidden coins a day from a secret and the layout's hiding spots, three
+- `village.mjs` — the Bonus Box game's judge: 5 hidden coins a day from a secret and the layout's hiding spots, three
   daily jobs from the door number (judged from the run's position history), one run per wallet per door,
-  reveal-by-proximity, distance/speed/pace checks, banking 20 at the Post Office writes the entrants file. `docs/API.md`.
+  reveal-by-proximity, distance/speed/pace checks, banking 15 at the Post Office writes the entrants file. `docs/API.md`.
 - `cards/` — SVG card templates and the resvg renderer; `x.mjs` — X API v2 with OAuth 1.0a.
 
 ## Tests
-`node --test test/*.test.mjs` (38, no network). `test/smoke-village.mjs` plays a whole village day (coins, jobs, bank)
+`node --test test/*.test.mjs` (39, no network). `test/smoke-village.mjs` plays a whole village day (coins, jobs, bank)
 against the API on localhost in about 30 s.
 `test/smoke-local.mjs` and `test/rehearse-devnet.mjs` hit devnet with the funded treasury (`faucet.solana.com`):
 the rehearsal creates a throwaway mint, fakes buyers, runs a real door ~5 minutes out, has every buyer open it

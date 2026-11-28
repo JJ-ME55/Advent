@@ -48,8 +48,8 @@ const typesOn = (d) => dayJobs(layout, d).map((j) => j.type);
 
 test("the day's map is secret-dependent, differs per door and uses real spots", () => {
   const a = dayMap(layout, "s1", 1), b = dayMap(layout, "s1", 2), c = dayMap(layout, "s2", 1);
-  assert.equal(a.length, COINS); assert.equal(COINS, 10);
-  assert.equal(new Set(a.map((x) => x.spot)).size, COINS, "10 distinct spots");
+  assert.equal(a.length, COINS); assert.equal(COINS, 5);
+  assert.equal(new Set(a.map((x) => x.spot)).size, COINS, "distinct spots");
   assert.notDeepEqual(a.map((x) => x.spot), b.map((x) => x.spot), "door 2 hides them elsewhere");
   assert.notDeepEqual(a.map((x) => x.spot), c.map((x) => x.spot), "another secret, another map");
   assert.deepEqual(a, dayMap(layout, "s1", 1), "deterministic");
@@ -163,7 +163,24 @@ test("teleports and machine-gun pickups are refused", () => {
   assert.ok(!Array.isArray(v.pickup(token, b.id, { x: b.x, y: 0, z: b.z })), "legal pace, taken");
 });
 
-test("a full day: 10 hidden coins and 3 jobs, then bank at the Post Office, then entered", () => {
+test("once the 10 job coins are in, nearby lists every uncollected coin, wherever the player is", () => {
+  const { v, clock } = fresh(T + 10);
+  const { token } = v.session("W");
+  const me = player(v, token, clock, layout.spawn);
+  const far = { x: -95, z: -95 }; // a corner of the dev square, away from most coins
+  me.walk(far);
+  const before = v.move(token, me.at).nearby.length;
+  assert.ok(before < COINS, `only coins within ${REVEAL_RADIUS} m before the jobs (${before})`);
+  for (const job of v.jobsFor(1)) doJob(v, token, clock, me, job);
+  me.walk(far);
+  const r = v.move(token, me.at);
+  assert.equal(r.jobCoins, JOB_COINS);
+  assert.equal(r.nearby.length, COINS, "every hidden coin is listed now");
+  const c = r.nearby[0]; me.walk(c); v.pickup(token, c.id, me.at);
+  assert.equal(v.move(token, me.at).nearby.length, COINS - 1, "a collected coin drops out");
+});
+
+test("a full day: the hidden coins and 3 jobs, then bank at the Post Office, then entered", () => {
   const { v, clock, dir } = fresh(T + 10);
   const { token, bank } = v.session("W");
   const me = player(v, token, clock, layout.spawn);
@@ -199,7 +216,7 @@ test("a full day: 10 hidden coins and 3 jobs, then bank at the Post Office, then
   assert.equal(v2.session("W").door, 2);
 });
 
-test("bank refused with 9 hidden coins, or with the jobs short (6 of 10 job coins)", () => {
+test("bank refused one hidden coin short, or with the jobs short (6 of 10 job coins)", () => {
   // nine coins, all jobs
   let { v, clock } = fresh(T + 10);
   let { token, bank } = v.session("W");
@@ -208,7 +225,7 @@ test("bank refused with 9 hidden coins, or with the jobs short (6 of 10 job coin
   for (const job of v.jobsFor(1)) doJob(v, token, clock, me, job);
   me.walk(bank); clock.t = T + 10 + MIN_RUN_SECONDS + 1;
   let r = v.bank(token, me.at);
-  assert.equal(r[0], 409); assert.equal(r[1].reason, "not-enough"); assert.equal(r[1].found, 9); assert.equal(r[1].jobCoins, 10);
+  assert.equal(r[0], 409); assert.equal(r[1].reason, "not-enough"); assert.equal(r[1].found, COINS - 1); assert.equal(r[1].jobCoins, 10);
   // all coins, two jobs (the 3 and the 3: 6 job coins; 9 isn't reachable with rewards of 3, 3 and 4)
   ({ v, clock } = fresh(T + 10)); ({ token, bank } = v.session("W"));
   me = player(v, token, clock, layout.spawn);
@@ -216,7 +233,7 @@ test("bank refused with 9 hidden coins, or with the jobs short (6 of 10 job coin
   const [j1, j2] = v.jobsFor(1); doJob(v, token, clock, me, j1); doJob(v, token, clock, me, j2);
   me.walk(bank); clock.t = T + 10 + MIN_RUN_SECONDS + 1;
   r = v.bank(token, me.at);
-  assert.equal(r[0], 409); assert.equal(r[1].reason, "not-enough"); assert.equal(r[1].found, 10); assert.equal(r[1].jobCoins, 6);
+  assert.equal(r[0], 409); assert.equal(r[1].reason, "not-enough"); assert.equal(r[1].found, COINS); assert.equal(r[1].jobCoins, 6);
 });
 
 test("a taxi finished faster than physically possible is rejected, and can be started again", () => {

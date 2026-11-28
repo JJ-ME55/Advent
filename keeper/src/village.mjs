@@ -1,11 +1,12 @@
 // The North Pole village, server side (the judge). Fish draws it; this decides what counts.
 //
-// A player needs 20 coins a day: 10 HIDDEN coins found around the map and 10 JOB coins from 3 daily jobs (3 + 3 + 4).
-// Banking all 20 at the Post Office (the layout's bank point) enters the wallet for that door's Bonus Box; the keeper
+// A player needs 15 coins a day: 5 HIDDEN coins found around the map and 10 JOB coins from 3 daily jobs (3 + 3 + 4).
+// Banking all 15 at the Post Office (the layout's bank point) enters the wallet for that door's Bonus Box; the keeper
 // draws 10 winners from the entrants with the door's drand round at settle time, and they open the box on the site.
 //
 // - Hidden coins: each door d has a day's map, COINS of the layout's hiding spots chosen from a secret so the positions
-//   change every day and can't be read from the client. The server reveals only coins within REVEAL_RADIUS and checks
+//   change every day and can't be read from the client. The server reveals only coins within REVEAL_RADIUS (all of them
+//   once the day's 10 job coins are earned: the game then shows the rest on the map) and checks
 //   every pickup (3 m, speed, pace).
 // - Jobs: four types exist (taxi, delivery, chase, brawl); each day 3 are picked from the door number alone (public,
 //   the same for everyone), with the taxi's two points and the delivery's three doors picked the same way from the
@@ -21,7 +22,7 @@ import { dirname } from "node:path";
 import { createHash, randomBytes } from "node:crypto";
 import { doorTime, snapshotTime, LAST_DOOR } from "./doors.mjs";
 
-export const COINS = Number(process.env.VILLAGE_COINS ?? 10); // hidden coins a day
+export const COINS = Number(process.env.VILLAGE_COINS ?? 5); // hidden coins a day (Fish's rule change of 28 Nov: 5, was 10)
 export const JOB_COINS = 10; // from the day's three jobs
 export const JOB_REWARDS = [3, 3, 4];
 export const JOB_TYPES = ["taxi", "delivery", "chase", "brawl"];
@@ -157,7 +158,8 @@ export function createVillage({ stateFile, entrantsFile, layoutFile, layout: giv
   const byToken = new Map();
   for (const [d, ss] of Object.entries(state.sessions)) for (const [wallet, s] of Object.entries(ss)) { s.jobs ??= {}; s.jobCoins ??= 0; byToken.set(s.token, { door: Number(d), wallet, s }); }
 
-  const nearby = (d, s, p) => mapFor(d).filter((c) => !s.collected.includes(c.id) && dist(c, p) <= REVEAL_RADIUS).map(({ id, x, y, z }) => ({ id, x, y, z }));
+  // the coins the client may see: within REVEAL_RADIUS, or every uncollected one once the day's job coins are all earned
+  const nearby = (d, s, p) => { const all = s.jobCoins >= JOB_COINS; return mapFor(d).filter((c) => !s.collected.includes(c.id) && (all || dist(c, p) <= REVEAL_RADIUS)).map(({ id, x, y, z }) => ({ id, x, y, z })); };
   const jobsView = (d, s) => jobsFor(d).map((j) => ({ ...j, done: !!s.jobs[j.id]?.done, started: !!s.jobs[j.id]?.startedAt && !s.jobs[j.id]?.done }));
   const jobsDone = (d, s) => jobsFor(d).filter((j) => s.jobs[j.id]?.done).map((j) => j.id);
   const view = (d, s, p) => ({ door: d, found: s.collected.length, collected: s.collected.length, total: COINS, jobCoins: s.jobCoins, jobTotal: JOB_COINS, jobs: jobsView(d, s), banked: s.banked, nearby: nearby(d, s, p), closesAt: snapshotTime(d), drawAt: doorTime(d) });
@@ -246,7 +248,7 @@ export function createVillage({ stateFile, entrantsFile, layoutFile, layout: giv
       js.done = true; js.finishedAt = t; s.jobCoins = Math.min(JOB_COINS, s.jobCoins + job.reward); save();
       return { ok: true, job: jobId, reward: job.reward, jobCoins: s.jobCoins, jobsDone: jobsDone(d, s), ...view(d, s, p) };
     },
-    /** Bank the 20 at the Post Office: enters the wallet for the door's Bonus Box. */
+    /** Bank the 15 at the Post Office: enters the wallet for the door's Bonus Box. */
     bank(token, p) {
       const h = lookup(token); if (Array.isArray(h)) return h;
       p = pos(p); if (!p) return [400, { error: "pos {x,y,z} required" }];

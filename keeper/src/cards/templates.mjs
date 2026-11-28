@@ -59,7 +59,7 @@ export function claimSvg({ door, sol, wallet, kind = "door", ticker = "$ADVENT" 
   ${doorArt(door, 120, 200, true)}
   ${big(`${sol} SOL`, 300, 110)}
   ${line(`to ${wallet}`, 360, 30, C.gold)}
-  ${line(kind === "bonus" ? "found all 20 coins in the village and won the draw" : "opened their door and found a prize", 410)}
+  ${line(kind === "bonus" ? "found all 15 coins in the village and won the draw" : "opened their door and found a prize", 410)}
   ${line(`${ticker} · paid on claim · every payout is a public transaction`, 470, 22)}`;
   return frame(inner, { accent: C.gold });
 }
