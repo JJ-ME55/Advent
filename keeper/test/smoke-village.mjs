@@ -66,7 +66,7 @@ if (job("delivery")) { const j = job("delivery"); await startJob(j); await stepT
 if (job("brawl")) { await startJob(job("brawl")); console.log("    waiting 26 s for the brawl clock"); await sleep(26_000); await finishJob(job("brawl")); }
 if (job("chase")) { const g = lay.givers.brawl; if (!job("brawl")) await sleep(21_000); await stepTo({ x: g.x, y: 0, z: g.z }); await finishJob(job("chase")); }
 const [, mv] = await call("POST", "/village/move", { token: s.token, pos: at });
-must(mv.jobCoins === 10 && mv.found === 10 && mv.jobs.every((j) => j.done), `20/20: ${mv.found} hidden + ${mv.jobCoins} job coins`);
+must(mv.jobCoins === 10 && mv.found === s.total && mv.jobs.every((j) => j.done), `${s.total + 10}/${s.total + 10}: ${mv.found} hidden + ${mv.jobCoins} job coins`);
 const [ac, av] = await call("POST", "/village/job/finish", { token: s.token, job: s.jobs[0].id, pos: at });
 must(ac === 409 && av.reason === "already-done", "a job counts once");
 const [tc, tv] = await call("POST", "/village/move", { token: s.token, pos: { x: at.x + 5000, y: 0, z: at.z } });
